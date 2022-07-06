@@ -27,6 +27,7 @@ Alternatively, a regular python virtual environment should be sufficient.
 ## Offline processing
 Offline processing can be done by running the corresponding offline test script (ie. mi_offline_test.py, p300_offline_test.py, etc.)
 Change the filename in the script to point to the data you want to process.
+Test something 
 >python examples/mi_offline_test.py
 
 
