@@ -66,7 +66,7 @@ class EEG_data():
         self.user_id = user_id                              # user id
         self.nchannels = nchannels                          # number of channels
         self.channel_labels = channel_labels                # EEG electrode placements
-        self.fsample = fsample                              # sampling rate
+        self.fsample = fsample/self.divider                              # sampling rate
         self.max_size = max_size                            # maximum size of eeg
         self.explicit_settings = True                       # settings are explicit and will not be updated based on headset data
 
@@ -77,7 +77,7 @@ class EEG_data():
 
     # Load data from a variety of sources
     # Currently only suports .xdf format
-    def load_offline_eeg_data(self, filename, format='xdf', subset=[]):
+    def load_offline_eeg_data(self, filename, format='xdf', divider=1, subset=[], find_data=False):
         """
         Loads offline data from a file
 
@@ -91,6 +91,10 @@ class EEG_data():
             # load from xdf
             data, self.header = pyxdf.load_xdf(filename)
 
+            print(f"The divider is: {divider}\n")
+
+            self.divider = divider
+
             # get the indexes of data
             for i in range(len(data)):
                 namestring = data[i]['info']['name'][0]
@@ -100,6 +104,10 @@ class EEG_data():
 
                 if typestring == "EEG":
                     self.eeg_index = i
+                    if find_data == True:
+                        find_data = False
+                        index = i
+                        return data, index
                 if "LSL_Marker_Strings" in typestring:
                     self.marker_index = i
                 if "PythonResponse" in namestring:
@@ -108,8 +116,80 @@ class EEG_data():
             # fill up the marker and eeg buffers with the saved data
             self.marker_data = data[self.marker_index]['time_series']
             self.marker_timestamps = data[self.marker_index]['time_stamps']
+
+
             self.eeg_data = data[self.eeg_index]['time_series']
+
+            [nsamples, nchannels] = np.shape(self.eeg_data)
+
+            # nsamples = 125952
+            # nchannels = 16
+
+            # self.eeg_data_2 = [0] * int(nsamples/self.divider)
+            print(nsamples)
+            print(self.divider)
+
+            if abs((nsamples / self.divider) - int(nsamples / self.divider)) < 0.5 or self.divider == 1.25:
+                self.eeg_data_2 = np.ndarray((int(nsamples / self.divider), nchannels))
+            elif abs((nsamples / self.divider) - int(nsamples / self.divider)) >= 0.5:
+                self.eeg_data_2 = np.ndarray((int(nsamples / self.divider) + 1, nchannels))
+
+            # self.eeg_data_2 = np.ndarray((int(nsamples/self.divider) + 1, nchannels)) #was initially int(nsamples/self.divider) + 2
+
+            for i in range(nchannels):
+                k = 0
+                if self.divider - int(self.divider) == 0:
+                    for j in range(nsamples):
+                        if j % self.divider == 0:
+                            self.eeg_data_2[k, i] = self.eeg_data[j, i]
+                            k += 1
+
+                if self.divider - int(self.divider) != 0:
+                    for j in range(nsamples - 1):  # nsamples - 1
+                        if ((k * self.divider) <= j + 1) and ((k * self.divider) >= j):
+                            self.eeg_data_2[k, i] = (abs(self.eeg_data[j, i] - self.eeg_data[j + 1, i]) * abs(
+                                self.divider - int(self.divider))) + self.eeg_data[j, i]
+                            k += 1
+
+            self.eeg_data = self.eeg_data_2
+
+            print(f"The length of eeg_data is: {len(self.eeg_data_2)}")
+
             self.eeg_timestamps = data[self.eeg_index]['time_stamps']
+
+            if abs((nsamples/self.divider) - int(nsamples/self.divider)) < 0.5 or self.divider == 1.25:
+                self.eeg_timestamps_2 = np.ndarray(int(nsamples/self.divider))
+            elif abs((nsamples/self.divider) - int(nsamples/self.divider)) >= 0.5:
+                self.eeg_timestamps_2 = np.ndarray(int(nsamples/self.divider) + 1)
+
+            print(f"The length of eeg_timestamps is: {len(self.eeg_timestamps_2)}")
+
+
+
+            if self.divider - int(self.divider) == 0:
+                y = 0
+                for x in range(nsamples):
+                    if x % self.divider == 0:
+                        self.eeg_timestamps_2[y] = self.eeg_timestamps[x]
+                        y += 1
+
+            if self.divider - int(self.divider) != 0:
+                y = 0
+                for x in range(nsamples - 1): #was initially nsamples - 1
+                    if ((y*self.divider) <= x + 1) and ((y*self.divider) >= x):
+                        self.eeg_timestamps_2[y] = (abs(self.eeg_timestamps[x] - self.eeg_timestamps[x + 1]) * abs(self.divider - int(self.divider))) + self.eeg_timestamps[x]
+                        y += 1
+
+
+            #while x < len(self.eeg_timestamps) :
+                #if x % self.divider == 0:
+                    #self.eeg_timestamps_2[y] = self.eeg_timestamps[x]
+                    #y += 1
+                #x += 1
+
+            self.eeg_timestamps = self.eeg_timestamps_2
+
+            print(f"The length of eeg_timestamps is: {len(self.eeg_timestamps)}")
 
             # Unless explicit settings are desired, get settings from headset
             #if self.explicit_settings == False:
@@ -138,7 +218,7 @@ class EEG_data():
         """
 
         self.headset_string = data[self.eeg_index]['info']['name'][0]            # headset name in string format
-        self.fsample = float(data[self.eeg_index]['info']['nominal_srate'][0])   # sampling rate
+        self.fsample = float(data[self.eeg_index]['info']['nominal_srate'][0])/self.divider   # sampling rate
         self.nchannels = int(data[self.eeg_index]['info']['channel_count'][0])   # number of channels 
         self.channel_labels = []                                                 # channel labels/locations, 'TRG' means trigger
         try:
@@ -694,7 +774,7 @@ class EEG_data():
                         self.marker_count += 1
                         break
 
-                print(marker_info)
+                ##print(marker_info)
 
                 # send feedback to unity if there is an available outlet
                 if self.stream_outlet == True:

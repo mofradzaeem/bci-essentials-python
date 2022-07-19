@@ -64,7 +64,7 @@ def lico(X,y,expansion_factor=3, sum_num=2, shuffle=False):
 class generic_classifier():
     #
     def __init__(self, training_selection=0, subset=[]):
-        print("initializing the classifier")
+        ##print("initializing the classifier")
         self.X = []
         self.y = []
 
