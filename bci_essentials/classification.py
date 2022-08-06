@@ -8,7 +8,7 @@
 
 # Inputs are N x M x P where N = number of channels, M = number of samples, and P = number of signals / possible selections in P300
 
-# Outputs a predction 
+# Outputs a predction
 
 import numpy as np
 import random
@@ -23,8 +23,12 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 from pyriemann.estimation import ERPCovariances, XdawnCovariances, Covariances
 from pyriemann.tangentspace import TangentSpace
-from pyriemann.classification import MDM, TSclassifier
-from pyriemann.utils.viz import plot_confusion_matrix
+from pyriemann.classification import MDM, TSclassifier, KNearestNeighbor, FgMDM
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+# from pyriemann.utils.viz import plot_confusion_matrix
+import pickle
 
 from scipy import signal
 
@@ -45,7 +49,7 @@ def lico(X,y,expansion_factor=3, sum_num=2, shuffle=False):
     true_X = X[y == 1]
 
     n,m,p = true_X.shape
-    print("Shape of ERPs only ", true_X.shape)
+    #print("Shape of ERPs only ", true_X.shape)
     new_n = n*np.round(expansion_factor-1)
     new_X = np.zeros([new_n,m,p])
     for i in range(n):
@@ -64,7 +68,7 @@ def lico(X,y,expansion_factor=3, sum_num=2, shuffle=False):
 class generic_classifier():
     #
     def __init__(self, training_selection=0, subset=[]):
-        print("initializing the classifier")
+        #print("initializing the classifier")
         self.X = []
         self.y = []
 
@@ -108,13 +112,13 @@ class generic_classifier():
                 return X
 
             if type(self.subset[0]) == int:
-                print("Using subset indices")
+                #print("Using subset indices")
 
                 subset_indices = self.subset
 
             # Or channel labels
             if type(self.subset[0]) == str:
-                print("Using channel labels and subset labels")
+                #print("Using channel labels and subset labels")
                 
                 # Replace indices with those described by labels
                 for sl in self.subset:
@@ -146,14 +150,14 @@ class generic_classifier():
 
         # notify if failed
         except:
-            print("something went wrong, no subset taken")
+            #print("something went wrong, no subset taken")
             return X
 
 
     
     # add training data, to the training set using a decision block and a label
     def add_to_train(self, decision_block, labels, num_options = 0, meta = []):
-        print("adding to training set")
+        #print("adding to training set")
         # reshape from [n,m,p] to [p,n,m]
         # n = number of channels
         # m = number of samples
@@ -186,7 +190,7 @@ class generic_classifier():
 
         decision_block = self.get_subset(decision_block)
 
-        print("making a prediction")
+        #print("making a prediction")
 
         # # reshape from [n,m,p] to [p,n,m]
         # n,m,p = decision_block.shape
@@ -209,8 +213,8 @@ class generic_classifier():
         # print(relative_proba)
 
         log_proba = np.log(relative_proba)
-        print("log relative probabilities")
-        print(log_proba)
+        #print("log relative probabilities")
+        #print(log_proba)
 
         # the selection is the highest probability
 
@@ -235,7 +239,7 @@ class erp_rg_classifier(generic_classifier):
         self.random_seed = random_seed
 
     def add_to_train(self, decision_block, label_idx):
-        print("adding to training set")
+        #print("adding to training set")
         # n = number of channels
         # m = number of samples
         # p = number of windows
@@ -247,7 +251,7 @@ class erp_rg_classifier(generic_classifier):
         # get labels from label_idx
         labels = np.zeros([p])
         labels[label_idx] = 1
-        print(labels)
+        #print(labels)
 
         # If the classifier has no data then initialize
         if self.X == []:
@@ -260,9 +264,9 @@ class erp_rg_classifier(generic_classifier):
             self.y = np.append(self.y, labels, axis=0)
 
     def fit(self, n_splits = 2, plot_cm=False, plot_roc=False, lico_expansion_factor = 1):
-        print("Fitting the model using RG")
+        #print("Fitting the model using RG")
 
-        print(self.X.shape, self.y.shape)
+        #print(self.X.shape, self.y.shape)
 
         # Define the strategy for cross validation
         cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=self.random_seed)
@@ -281,12 +285,12 @@ class erp_rg_classifier(generic_classifier):
             X_test = self.X[test_idx]
 
             #LICO
-            print ("Before LICO: Shape X",X_train.shape,"Shape y", y_train.shape)
+            #print ("Before LICO: Shape X",X_train.shape,"Shape y", y_train.shape)
             if sum(y_train) > 2:
                 if lico_expansion_factor > 1:
                     X_train, y_train = lico(X_train, y_train, expansion_factor=lico_expansion_factor, sum_num=2, shuffle=False)
                     print("y_train =",y_train)
-            print("After LICO: Shape X",X_train.shape,"Shape y", y_train.shape)
+            #print("After LICO: Shape X",X_train.shape,"Shape y", y_train.shape)
 
             # Oversampling
             if self.oversample_ratio > 0:
@@ -360,11 +364,11 @@ class erp_rg_classifier(generic_classifier):
             #TODO handle exception where two probabilities are the same
             prediction = int(np.where(predprobs == np.amax(predprobs))[0][0])
 
-            print("y_test =",y_test)
+            #print("y_test =",y_test)
 
-            print(predproba)
-            print(real[0])
-            print(prediction)
+            #print(predproba)
+            #print(real[0])
+            #print(prediction)
 
             # a,pred_proba[test_idx] = self.clf.predict_proba(self.X[test_idx])
             # print(preds[test_idx])
@@ -374,23 +378,23 @@ class erp_rg_classifier(generic_classifier):
         # accuracy
         accuracy = sum(preds == self.y)/len(preds)
         self.offline_accuracy = accuracy
-        print("accuracy = {}".format(accuracy))
+        #print("accuracy = {}".format(accuracy))
 
         # precision
         precision = precision_score(self.y,preds)
         self.offline_precision = precision
-        print("precision = {}".format(precision))
+        #print("precision = {}".format(precision))
 
         # recall
         recall = recall_score(self.y, preds)
         self.offline_recall = recall
-        print("recall = {}".format(recall))
+        #print("recall = {}".format(recall))
 
         # confusion matrix in command line
         cm = confusion_matrix(self.y, preds)
         self.offline_cm = cm
-        print("confusion matrix")
-        print(cm)
+        #print("confusion matrix")
+        #print(cm)
 
 
         if plot_cm == True:
@@ -400,7 +404,7 @@ class erp_rg_classifier(generic_classifier):
 
         if plot_roc == True:
             print("plotting the ROC...")
-            print("just kidding ROC has not been implemented")
+            #print("just kidding ROC has not been implemented")
 
 # SSVEP Classifier
 class ssvep_basic_classifier(generic_classifier):
@@ -429,7 +433,7 @@ class ssvep_basic_classifier(generic_classifier):
         # get dimensions
         nwindows, nchannels, nsamples = self.X.shape 
 
-        print("Target freqs:", self.target_freqs)
+        #print("Target freqs:", self.target_freqs)
 
         # do the rest of the training if train_free is false
         self.X = np.array(self.X)
@@ -488,7 +492,7 @@ class ssvep_basic_classifier(generic_classifier):
         # accuracy
         accuracy = sum(preds == self.y)/len(preds)
         self.offline_accuracy.append(accuracy)
-        print("accuracy = {}".format(accuracy))
+        #print("accuracy = {}".format(accuracy))
 
         # # precision
         # precision = precision_score(self.y,preds)
@@ -503,8 +507,8 @@ class ssvep_basic_classifier(generic_classifier):
         # confusion matrix in command line
         cm = confusion_matrix(self.y, preds)
         self.offline_cm = cm
-        print("confusion matrix")
-        print(cm)
+        #print("confusion matrix")
+        #print(cm)
 
         # if plot_cm == True:
         #     cm = confusion_matrix(self.y, preds)
@@ -531,7 +535,7 @@ class ssvep_basic_classifier(generic_classifier):
 
         # predicts for each window
         preds = self.clf.predict(Xfeatures)
-        print(preds)
+        #print(preds)
 
 
         # predict the value from predictions which appear in the most windows
@@ -548,7 +552,7 @@ class ssvep_basic_classifier(generic_classifier):
 
         # Print the predictions for sanity
         #print(preds)
-        print(prediction)
+        #print(prediction)
 
         return prediction
 
@@ -566,15 +570,15 @@ class ssvep_basic_classifier_tf(generic_classifier):
 
     def fit(self):
         print("Oh deary me you must have mistaken me for another classifier which requires training")
-        print("I DO NOT NEED TRAINING.")
-        print("THIS IS MY FINAL FORM")
+        #print("I DO NOT NEED TRAINING.")
+        #print("THIS IS MY FINAL FORM")
 
     def predict(self, X):
         # get the shape
         nwindows, nchannels, nsamples = X.shape
         # The first time it is called it must be set up
         if self.setup == False:
-            print("setting up the training free classifier")
+            #print("setting up the training free classifier")
 
             self.setup = True
 
@@ -601,7 +605,7 @@ class ssvep_basic_classifier_tf(generic_classifier):
             
         prediction = np.where(votes == np.amax(votes))
 
-        print(prediction)
+        #print(prediction)
 
         return prediction
 
@@ -621,7 +625,7 @@ class mi_classifier(generic_classifier):
         # Initialize the classifier type
         ts = TSclassifier()
         mdm = MDM(metric=dict(mean='riemann', distance='riemann'))
-        lr = LogisticRegression()
+        lr = LogisticRegression() #change here maybe
         #csp = CSP()
 
         # Tangent Space Logistic Regression
@@ -641,7 +645,7 @@ class mi_classifier(generic_classifier):
         #     self.clf = Pipeline([('CSP', csp), ('LogisticRegression', lr)])
 
         else:
-            print("Classifier type not defined") 
+            print("Classifier type not defined")
 
         # Threshold
         self.pred_threshold = pred_threshold
@@ -687,6 +691,9 @@ class mi_classifier(generic_classifier):
             self.clf.fit(X_train_cov, y_train)
             preds[test_idx] = self.clf.predict(X_test_cov)
 
+            with open('pickled.picke', 'wb') as handle:
+                pickle.dump((X_train_cov, y_train, X_test_cov, y_test), handle, protocol=pickle.HIGHEST_PROTOCOL)
+
         # Print performance stats
         # accuracy
         correct = preds == self.y
@@ -698,23 +705,23 @@ class mi_classifier(generic_classifier):
         # accuracy
         accuracy = sum(preds == self.y)/len(preds)
         self.offline_accuracy.append(accuracy)
-        print("accuracy = {}".format(accuracy))
+        #print("accuracy = {}".format(accuracy))
 
         # precision
         precision = precision_score(self.y,preds)
         self.offline_precision.append(precision)
-        print("precision = {}".format(precision))
+        #print("precision = {}".format(precision))
 
         # recall
         recall = recall_score(self.y, preds)
         self.offline_recall.append(recall)
-        print("recall = {}".format(recall))
+        #print("recall = {}".format(recall))
 
         # confusion matrix in command line
         cm = confusion_matrix(self.y, preds)
         self.offline_cm = cm
-        print("confusion matrix")
-        print(cm)
+        # print("confusion matrix")
+        # print(cm)
 
     def predict(self, X):
         # if X is 2D, make it 3D with one as first dimension
@@ -726,7 +733,7 @@ class mi_classifier(generic_classifier):
         # Troubleshooting
         #X = self.X[-6:,:,:]
 
-        print("the shape of X is", X.shape)
+        #print("the shape of X is", X.shape)
 
         X_cov = Covariances().transform(X)
         #X_cov = X_cov[0,:,:]
@@ -742,6 +749,139 @@ class mi_classifier(generic_classifier):
         #pred = (pred_proba[:] >= self.pred_threshold).astype(int) # set threshold as 0.3
 
         return pred
+
+class maz_classier(generic_classifier):
+    def set_maz_classifer_settings(self, n_splits =3, type="TS", rebuild = True, random_seed = 42):
+        self.n_splits = n_splits
+        self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+        # Initialize the classifier type
+        ts = KNearestNeighbor(n_neighbors=10)
+        mdm = MDM(metric=dict(mean='riemann', distance='riemann'))
+        lr = LogisticRegression()  # change here maybe
+        # csp = CSP()
+
+        # Tangent Space Logistic Regression
+        if type == "TS":
+            ts = KNearestNeighbor()
+            self.clf_model = Pipeline([("Tangent Space", ts)])
+            self.clf = Pipeline([("Tangent Space", ts)])
+
+        # Minimum Distance to Mean
+        elif type == "MDM":
+            self.clf_model = Pipeline([("MDM", mdm)])
+            self.clf = Pipeline([("MDM", mdm)])
+
+        # CSP + Logistic Regression (REQUIRES MNE CSP)
+        # elif type == "CSP-LR":
+        #     self.clf_model = Pipeline([('CSP', csp), ('LogisticRegression', lr)])
+        #     self.clf = Pipeline([('CSP', csp), ('LogisticRegression', lr)])
+
+        else:
+            print("Classifier type not defined")
+
+        # Threshold
+
+        # Rebuild from scratch with each training
+        self.rebuild = True
+
+    def fit(self):
+        # get dimensions
+        nwindows, nchannels, nsamples = self.X.shape
+
+        # do the rest of the training if train_free is false
+        self.X = np.array(self.X)
+
+        # Try rebuilding the classifier each time
+        if self.rebuild == True:
+            self.next_fit_window = 0
+            self.clf = self.clf_model
+
+        # get channel subset
+        # self.get_subset()
+
+        # get temporal subset
+        subX = self.X[self.next_fit_window:, :, :]
+        suby = self.y[self.next_fit_window:]
+        self.next_fit_window = nwindows
+
+        # Init predictions to all false
+        preds = np.zeros(nwindows)
+
+        for train_idx, test_idx in self.cv.split(subX, suby):
+            X_train, X_test = subX[train_idx], subX[test_idx]
+            y_train, y_test = suby[train_idx], suby[test_idx]
+
+            # get the covariance matrices for the training set
+            X_train_cov = Covariances().transform(X_train)
+            X_test_cov = Covariances().transform(X_test)
+
+            # fit the classsifier
+            self.clf.fit(X_train_cov, y_train)
+            # save Xtrain y train in a file, and y_test and x_test
+            #
+            preds[test_idx] = self.clf.predict(X_test_cov)
+
+            with open('pickled.picke', 'wb') as handle:
+                pickle.dump((X_train_cov, y_train, X_test_cov, y_test), handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+        # Print performance stats
+        # accuracy
+        correct = preds == self.y
+        # print(correct)
+
+        self.offline_window_count = nwindows
+        self.offline_window_counts.append(self.offline_window_count)
+
+        # accuracy
+        accuracy = sum(preds == self.y) / len(preds)
+        self.offline_accuracy.append(accuracy)
+        # print("accuracy = {}".format(accuracy))
+
+        # precision
+        precision = precision_score(self.y, preds)
+        self.offline_precision.append(precision)
+        # print("precision = {}".format(precision))
+
+        # recall
+        recall = recall_score(self.y, preds)
+        self.offline_recall.append(recall)
+        # print("recall = {}".format(recall))
+
+        # confusion matrix in command line
+        cm = confusion_matrix(self.y, preds)
+        self.offline_cm = cm
+        # print("confusion matrix")
+        # print(cm)
+
+    def predict(self, X):
+        # if X is 2D, make it 3D with one as first dimension
+        if len(X.shape) < 3:
+            X = X[np.newaxis, ...]
+
+        X = self.get_subset(X)
+
+        # Troubleshooting
+        # X = self.X[-6:,:,:]
+
+        # print("the shape of X is", X.shape)
+
+        X_cov = Covariances().transform(X)
+        # X_cov = X_cov[0,:,:]
+
+        pred = self.clf.predict(X_cov)
+        pred_proba = self.clf.predict_proba(X_cov)
+
+        for i in range(len(pred)):
+            self.predictions.append(pred[i])
+            self.pred_probas.append(pred_proba[i])
+
+        # add a threhold
+        # pred = (pred_proba[:] >= self.pred_threshold).astype(int) # set threshold as 0.3
+
+        return pred
+
 
 class switch_classifier(generic_classifier):
     def set_switch_classifier_settings(self, n_splits=3, rebuild = True, random_seed = 42):
@@ -847,7 +987,7 @@ class switch_classifier(generic_classifier):
         if len(X.shape) < 3:
             X = X[np.newaxis, ...]
 
-        print("the shape of X is", X.shape)
+        # print("the shape of X is", X.shape)
 
         activationString = ""
 
@@ -860,6 +1000,135 @@ class switch_classifier(generic_classifier):
 
 
         return activationString
+
+
+class maz_classifier2(generic_classifier):
+    def set_maz_classifier2_settings(self, n_splits=3, type="TS", pred_threshold=0.5, random_seed=42):
+        # Build the cross-validation split
+        self.n_splits = n_splits
+        self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+        # Initialize the classifier type
+        ts = RandomForestClassifier()
+        mdm = MDM(metric=dict(mean='riemann', distance='riemann'))
+        lr = LogisticRegression()  # change here maybe
+        # csp = CSP()
+
+        # Tangent Space Logistic Regression
+        if type == "TS":
+            ts = TSclassifier()
+            self.clf_model = Pipeline([("Tangent Space", ts)])
+            self.clf = Pipeline([("Tangent Space", ts)])
+
+        # Minimum Distance to Mean
+        elif type == "MDM":
+            self.clf_model = Pipeline([("MDM", mdm)])
+            self.clf = Pipeline([("MDM", mdm)])
+
+        # CSP + Logistic Regression (REQUIRES MNE CSP)
+        # elif type == "CSP-LR":
+        #     self.clf_model = Pipeline([('CSP', csp), ('LogisticRegression', lr)])
+        #     self.clf = Pipeline([('CSP', csp), ('LogisticRegression', lr)])
+
+        else:
+            print("Classifier type not defined")
+
+        # Threshold
+        self.pred_threshold = pred_threshold
+
+        # Rebuild from scratch with each training
+        self.rebuild = True
+
+    def fit(self):
+        # get dimensions
+        nwindows, nchannels, nsamples = self.X.shape
+
+        # do the rest of the training if train_free is false
+        self.X = np.array(self.X)
+
+        # Try rebuilding the classifier each time
+        if self.rebuild == True:
+            self.next_fit_window = 0
+            self.clf = self.clf_model
+
+        # get channel subset
+        # self.get_subset()
+
+        # get temporal subset
+        subX = self.X[self.next_fit_window:, :, :]
+        suby = self.y[self.next_fit_window:]
+        self.next_fit_window = nwindows
+
+        # Init predictions to all false
+        preds = np.zeros(nwindows)
+
+        for train_idx, test_idx in self.cv.split(subX, suby):
+            X_train, X_test = subX[train_idx], subX[test_idx]
+            y_train, y_test = suby[train_idx], suby[test_idx]
+
+            # get the covariance matrices for the training set
+            X_train_cov = Covariances().transform(X_train)
+            X_test_cov = Covariances().transform(X_test)
+
+            # fit the classsifier
+            self.clf.fit(X_train_cov, y_train)
+            preds[test_idx] = self.clf.predict(X_test_cov)
+
+        # Print performance stats
+        # accuracy
+        correct = preds == self.y
+        # print(correct)
+
+        self.offline_window_count = nwindows
+        self.offline_window_counts.append(self.offline_window_count)
+
+        # accuracy
+        accuracy = sum(preds == self.y) / len(preds)
+        self.offline_accuracy.append(accuracy)
+        # print("accuracy = {}".format(accuracy))
+
+        # precision
+        precision = precision_score(self.y, preds)
+        self.offline_precision.append(precision)
+        # print("precision = {}".format(precision))
+
+        # recall
+        recall = recall_score(self.y, preds)
+        self.offline_recall.append(recall)
+        # print("recall = {}".format(recall))
+
+        # confusion matrix in command line
+        cm = confusion_matrix(self.y, preds)
+        self.offline_cm = cm
+        # print("confusion matrix")
+        # print(cm)
+
+    def predict(self, X):
+        # if X is 2D, make it 3D with one as first dimension
+        if len(X.shape) < 3:
+            X = X[np.newaxis, ...]
+
+        X = self.get_subset(X)
+
+        # Troubleshooting
+        # X = self.X[-6:,:,:]
+
+        # print("the shape of X is", X.shape)
+
+        X_cov = Covariances().transform(X)
+        # X_cov = X_cov[0,:,:]
+
+        pred = self.clf.predict(X_cov)
+        pred_proba = self.clf.predict_proba(X_cov)
+
+        for i in range(len(pred)):
+            self.predictions.append(pred[i])
+            self.pred_probas.append(pred_proba[i])
+
+        # add a threhold
+        # pred = (pred_proba[:] >= self.pred_threshold).astype(int) # set threshold as 0.3
+
+        return pred
 
 
 

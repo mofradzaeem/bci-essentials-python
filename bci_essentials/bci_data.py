@@ -72,7 +72,7 @@ class EEG_data():
 
 
         if(len(channel_labels) != self.nchannels):
-            print("Channel locations do not fit number of channels!!!")
+            #print("Channel locations do not fit number of channels!!!")
             self.channel_labels = ['?'] * self.nchannels
 
     # Load data from a variety of sources
@@ -86,7 +86,7 @@ class EEG_data():
         self.subset = subset
 
         if(format == 'xdf'):
-            print("loading ERP data from {}".format(filename))
+            #print("loading ERP data from {}".format(filename))
 
             # load from xdf
             data, self.header = pyxdf.load_xdf(filename)
@@ -95,8 +95,8 @@ class EEG_data():
             for i in range(len(data)):
                 namestring = data[i]['info']['name'][0]
                 typestring = data[i]['info']['type'][0]
-                print(namestring)
-                print(typestring)
+                #print(namestring)
+                #print(typestring)
 
                 if typestring == "EEG":
                     self.eeg_index = i
@@ -148,12 +148,12 @@ class EEG_data():
         except:
             for i in range(self.nchannels):
                 self.channel_labels.append("?")
-        print(self.channel_labels)
+        #print(self.channel_labels)
 
         # if it is the DSI7 flex, relabel the channels, may want to make this more flexible in the future
-        print(self.headset_string)
+        #print(self.headset_string)
         if self.headset_string == "DSI7":
-            print(self.channel_labels)
+            #print(self.channel_labels)
             self.channel_labels[self.channel_labels.index('S1')] = 'O1'
             self.channel_labels[self.channel_labels.index('S2')] = 'Pz'
             self.channel_labels[self.channel_labels.index('S3')] = 'O2'
@@ -175,9 +175,9 @@ class EEG_data():
 
         # If a subset is to be used, define a new nchannels, channel labels, and eeg data
         if self.subset != []:
-            print("A subset was defined")
-            print("Original channels")
-            print(self.channel_labels)
+            #print("A subset was defined")
+            #print("Original channels")
+            #print(self.channel_labels)
 
             self.nchannels = len(self.subset)
             self.subset_indices = []
@@ -185,8 +185,8 @@ class EEG_data():
                 self.subset_indices.append(self.channel_labels.index(s))
 
             self.channel_labels = self.subset
-            print("Subset channels")
-            print(self.channel_labels)
+            #print("Subset channels")
+            #print(self.channel_labels)
 
             # Apply the subset to the raw data
             self.eeg_data = self.eeg_data[:, self.subset_indices]
@@ -200,8 +200,8 @@ class EEG_data():
         except:
             print("no classifier defined")
 
-        print(self.headset_string)
-        print(self.channel_labels)
+        #print(self.headset_string)
+        #print(self.channel_labels)
 
     # ONLINE
     # stream data from an online source
@@ -211,7 +211,7 @@ class EEG_data():
         """
         self.subset = subset
 
-        print("printing incoming stream")
+        #print("printing incoming stream")
 
         self.subset = subset
 
@@ -219,28 +219,28 @@ class EEG_data():
 
         if eeg_only == False:
             try:
-                print("Resolving LSL marker stream... ")
+                #print("Resolving LSL marker stream... ")
                 marker_stream = resolve_byprop('type', 'LSL_Marker_Strings', timeout=timeout)
                 self.marker_inlet = StreamInlet(marker_stream[0], processing_flags = 0)
-                print("Getting stream info...")
+                #print("Getting stream info...")
                 marker_info = self.marker_inlet.info()
-                print("The marker stream's XML meta-data is: ")
-                print(marker_info.as_xml())
+                #print("The marker stream's XML meta-data is: ")
+                #print(marker_info.as_xml())
                 
             except Exception as e:
-                print("No marker stream currently available")
+                #print("No marker stream currently available")
                 exit_flag = 1
             
         # Resolve EEG marker stream
         try: 
-            print("Resolving LSL EEG stream... ")
+            #print("Resolving LSL EEG stream... ")
             eeg_stream = resolve_byprop('type', 'EEG', timeout=timeout)
             self.eeg_inlet = StreamInlet(eeg_stream[0], processing_flags = 0)
-            print("Getting stream info...")
+            #print("Getting stream info...")
             eeg_info = self.eeg_inlet.info()
-            print("The EEG stream's XML meta-data is: ")
-            print(eeg_info.as_xml())
-            print(eeg_info)
+            #print("The EEG stream's XML meta-data is: ")
+            #print(eeg_info.as_xml())
+            #print(eeg_info)
             #print(eeg_info.created_at)
 
             # if there are no explicit settings
@@ -248,13 +248,13 @@ class EEG_data():
                 self.get_info_from_stream()
             
         except Exception as e:
-            print("No EEG stream currently available")
-            print(e) # print the exception
+            #print("No EEG stream currently available")
+            #print(e) # print the exception
             exit_flag = 1
 
         # Exit if one or both streams are unavailable
         if exit_flag == 1:
-            print("No streams available, exiting...")
+            #print("No streams available, exiting...")
             sys.exit()
 
         self.marker_data = []
@@ -282,7 +282,7 @@ class EEG_data():
         # iterate through children of <"channels"> to get the channel labels
         ch = eeg_info.desc().child("channels").child("channel")
         self.channel_labels = []                         # channel labels/locations, 'TRG' means trigger
-        print("num channels = ", self.nchannels)
+        #print("num channels = ", self.nchannels)
         for i in range(self.nchannels):
             name = ch.child_value("name")
             if name == "":
@@ -315,24 +315,24 @@ class EEG_data():
 
         # If a subset is to be used, define a new nchannels, and channel labels
         if self.subset != []:
-            print("A subset was defined")
-            print("Original channels")
-            print(self.channel_labels)
+            #print("A subset was defined")
+            #print("Original channels")
+            #print(self.channel_labels)
             self.nchannels = len(self.subset)
             self.subset_indices = []
             for s in self.subset:
                 self.subset_indices.append(self.channel_labels.index(s))
             self.channel_labels = self.subset
-            print("Subset channels")
-            print(self.channel_labels)
+            #print("Subset channels")
+            #print(self.channel_labels)
 
         # if other headsets have quirks, they can be accomodated for here
 
         # If a subset is to be used, define a new nchannels, channel labels, and eeg data
         if self.subset != []:
-            print("A subset was defined")
-            print("Original channels")
-            print(self.channel_labels)
+            #print("A subset was defined")
+            #print("Original channels")
+            #print(self.channel_labels)
 
             self.nchannels = len(self.subset)
             self.subset_indices = []
@@ -340,8 +340,8 @@ class EEG_data():
                 self.subset_indices.append(self.channel_labels.index(s))
 
             self.channel_labels = self.subset
-            print("Subset channels")
-            print(self.channel_labels)
+            #print("Subset channels")
+            #print(self.channel_labels)
 
         else:
             self.subset_indices = list(range(0,self.nchannels))
@@ -353,8 +353,8 @@ class EEG_data():
             print("no classifier defined")
 
         # Print some headset info
-        print(self.headset_string)
-        print(self.channel_labels)
+        #print(self.headset_string)
+        #print(self.channel_labels)
 
     # Get new data from stream
     def pull_data_from_stream(self, include_markers=True, include_eeg=True, return_eeg=False):
@@ -532,7 +532,7 @@ class EEG_data():
                     self.outlet = StreamOutlet(info)
                     
                     # next make an outlet
-                    print("the outlet exists")
+                    #print("the outlet exists")
                     self.stream_outlet = True
 
                     # Push the data
@@ -550,16 +550,16 @@ class EEG_data():
                         self.outlet.push_sample(["marker received : {}".format(self.marker_data[self.marker_count][0])])
 
                     if self.marker_data[self.marker_count][0] == 'Trial Started':
-                        print("Trial started")
+                        #print("Trial started")
                         # Note that a marker occured, but do nothing else
                         self.marker_count += 1
 
                     elif self.marker_data[self.marker_count][0] == 'Trial Ends':
-                        print("Trial ended")
+                        #print("Trial ended")
 
                         # If no classifier, then ideally just continue adding to the windows and labels arrays
                         if self.classifier_defined == False:
-                            print("NO CLASSIFIER DEFINED")
+                            #print("NO CLASSIFIER DEFINED")
                             self.marker_count += 1
                             break
 
@@ -570,28 +570,28 @@ class EEG_data():
                         # TRAIN
                         if training == True:
                             self.classifier.add_to_train(self.windows, self.labels)
-                            print(self.nwindows, " windows and labels added to training set")
+                            #print(self.nwindows, " windows and labels added to training set")
 
                             # if iterative training is on and active then also make a prediction
                             if iterative_training == True:
-                                print("Added current samples to training set, now making a prediction")
+                                #print("Added current samples to training set, now making a prediction")
                                 prediction = self.classifier.predict(self.windows)
 
                                 # Send the prediction to Unity
-                                print("{} was selected by the iterative classifier, sending to Unity".format(prediction))
+                                #print("{} was selected by the iterative classifier, sending to Unity".format(prediction))
                                 # pick a sample to send an wait for a bit
                                 
                                 # if online, send the packet to Unity
                                 if online == True:
-                                    print("okay, actually sending now...")
+                                    #print("okay, actually sending now...")
                                     self.outlet.push_sample(["{}".format(prediction)])
                         
                         # PREDICT
                         elif train_complete == True:
-                            print("making a prediction based on ", self.nwindows ," windows")
+                            #print("making a prediction based on ", self.nwindows ," windows")
 
                             if self.nwindows == 0:
-                                print("No windows to make a decision")
+                                #print("No windows to make a decision")
                                 self.marker_count += 1
                                 break
 
@@ -604,15 +604,15 @@ class EEG_data():
                             #     self.online_predictions.append(prediction)
 
 
-                            print("Recieved prediction from classifier")
+                            #print("Recieved prediction from classifier")
 
                             # Send the prediction to Unity
-                            print("{} was selected, sending to Unity".format(prediction))
+                            #print("{} was selected, sending to Unity".format(prediction))
                             # pick a sample to send an wait for a bit
                             
                             # if online, send the packet to Unity
                             if online == True:
-                                print("okay, actually sending now...")
+                                #print("okay, actually sending now...")
                                 self.outlet.push_sample(["{}".format(prediction)])
 
 
@@ -632,21 +632,21 @@ class EEG_data():
                     # If training completed then train the classifier
                     elif self.marker_data[self.marker_count][0] == 'Training Complete' and train_complete == False:
                         if self.classifier_defined == False:
-                            print("NO CLASSIFIER DEFINED")
+                            #print("NO CLASSIFIER DEFINED")
                             self.marker_count += 1
                             break
 
-                        print("Training the classifier")
+                        #print("Training the classifier")
                         self.classifier.fit()
                         train_complete = True
                         training = False
                         self.marker_count += 1
                         #continue
 
-                        print(self.windows.shape)
+                        #print(self.windows.shape)
 
                     elif self.marker_data[self.marker_count][0] == 'Update Classifier':
-                        print("Updating the classifier")
+                        #print("Updating the classifier")
 
                         self.classifier.fit()
 
@@ -681,7 +681,7 @@ class EEG_data():
                         for i in range(4,len(marker_info)):
                             if clf.target_freqs[i - 4] != float(marker_info[i]):
                                 clf.target_freqs[i - 4] = float(marker_info[i])
-                                print("changed ", i-4, "target frequency to", marker_info[i])
+                                #print("changed ", i-4, "target frequency to", marker_info[i])
 
                 # Check if the whole EEG window corresponding to the marker is available
                 end_time_plus_buffer = self.marker_timestamps[self.marker_count] + self.window_length + buffer
@@ -694,11 +694,11 @@ class EEG_data():
                         self.marker_count += 1
                         break
 
-                print(marker_info)
+                #print(marker_info)
 
                 # send feedback to unity if there is an available outlet
                 if self.stream_outlet == True:
-                    print("sending feedback to Unity")
+                    #print("sending feedback to Unity")
                     # send feedback for each marker that you receive
                     self.outlet.push_sample(["marker received : {}".format(self.marker_data[self.marker_count][0])])                
 
@@ -859,7 +859,7 @@ class ERP_data(EEG_data):
                     self.outlet = StreamOutlet(info)
                     
                     # next make an outlet
-                    print("the outlet exists")
+                    #print("the outlet exists")
                     self.stream_outlet = True
 
                     # Push the data
@@ -874,14 +874,14 @@ class ERP_data(EEG_data):
                     # if self.marker_data[self.marker_count][0] == 'P300 SingleFlash Begins' or 'P300 SingleFlash Started':
                     if self.marker_data[self.marker_count][0] == 'P300 SingleFlash Started' or self.marker_data[self.marker_count][0] == 'P300 SingleFlash Begins' or self.marker_data[self.marker_count][0] == 'Trial Started':
                         # Note that a marker occured, but do nothing else
-                        print("Trial Started")
+                       # print("Trial Started")
                         self.marker_count += 1
                     
                     # If training completed then train the classifier
                     elif self.marker_data[self.marker_count][0] == 'Training Complete' and train_complete == False:
 
                         if train_complete == False:
-                            print("Training the classifier")
+                            #print("Training the classifier")
                             self.classifier.fit()
                         train_complete = True
                         training = False
@@ -896,7 +896,7 @@ class ERP_data(EEG_data):
                             fig2.show()
 
 
-                        print(self.marker_data[self.marker_count][0])
+                        #print(self.marker_data[self.marker_count][0])
                         self.marker_count += 1
 
                         # ADD IN A CHECK TO MAKE SURE THERE IS SUFFICIENT INFO TO MAKE A DECISION
@@ -909,20 +909,20 @@ class ERP_data(EEG_data):
                             if train_complete == False:
                                 # ADD to training set
                                 if unity_train == True:
-                                    print("adding decision block {} to the classifier with label {}".format(self.decision_count, unity_label))
+                                    #print("adding decision block {} to the classifier with label {}".format(self.decision_count, unity_label))
                                     self.classifier.add_to_train(self.decision_blocks[self.decision_count,:,:,:], unity_label)
 
                                     # plot what was added
                                     #decision_vis(self.decision_blocks[self.decision_count,:,:,:], self.fsample, unity_label, self.channel_labels)
                                 else:
-                                    print("adding decision block {} to the classifier with label {}".format(self.decision_count, self.labels[self.decision_count]))
+                                    #print("adding decision block {} to the classifier with label {}".format(self.decision_count, self.labels[self.decision_count]))
                                     self.classifier.add_to_train(self.decision_blocks[self.decision_count,:,:,:], self.labels[self.decision_count])
 
                                     # if the last of the labelled data was just added
                                     if self.decision_count == len(self.labels) - 1:
 
                                         # FIT
-                                        print("training the classifier")
+                                        #print("training the classifier")
                                         self.classifier.fit(n_splits=len(self.labels))
 
                             # else do the predict the label
@@ -933,17 +933,17 @@ class ERP_data(EEG_data):
                                 prediction = self.classifier.predict_decision_block(decision_block=self.decision_blocks[self.decision_count,0:self.num_options,:,:])                      
 
                                 # Send the prediction to Unity
-                                print("{} was selected, sending to Unity".format(prediction))
+                                #print("{} was selected, sending to Unity".format(prediction))
                                 # pick a sample to send an wait for a bit
                                 
                                 # if online, send the packet to Unity
                                 if online == True:
-                                    print("okay, actually sending now...")
+                                    #print("okay, actually sending now...")
                                     self.outlet.push_sample(["{}".format(prediction)])
                     
                         # TODO
                         else:
-                            print("Insufficient windows to make a decision")
+                            #print("Insufficient windows to make a decision")
                             self.decision_count -= 1
                             #print(self.windows_per_decision)
 
@@ -1007,7 +1007,7 @@ class ERP_data(EEG_data):
                     
                     #current_target = target_order[self.decision_count]
                     if unity_train == True:
-                        print(marker_info)
+                        #print(marker_info)
                         current_target = unity_label
 
                     self.training_labels[self.nwindows] = current_target
