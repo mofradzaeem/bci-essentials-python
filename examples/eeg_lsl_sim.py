@@ -50,21 +50,21 @@ except:
 # Identify the file to simulate
 try:
     paradigmType = sys.argv[3]
-    if paradigmType == "p" or paradigmType == "p300"  or paradigmType == "P300"
-    print("Going to run the P300 example file" )
-    filename = "examples/data/p300_example.xdf"
+    if paradigmType == "p" or paradigmType == "p300"  or paradigmType == "P300":
+        print("Going to run the P300 example file" )
+        filename = "examples/data/p300_example.xdf"
+    #There is some bug with this right now because of the DSI-7 dropping the channel...
+    # elif paradigmType == "ssvep" or paradigmType == "SSVEP"  or paradigmType == "vep":
+    #     print("Going to run the SSVEP example file" )
+    #     filename = "examples/data/ssvep_example.xdf"
 
-    elif paradigmType == "ssvep" or paradigmType == "SSVEP"  or paradigmType == "vep"
-    print("Going to run the SSVEP example file" )
-    filename = "examples/data/ssvep_example.xdf"
+    elif paradigmType == "m" or paradigmType == "mi"  or paradigmType == "MI" or paradigmType == "motor imagery":
+        print("Going to run the MI example file" )
+        filename = "examples/data/mi_example.xdf"
 
-    elif paradigmType == "m" or paradigmType == "mi"  or paradigmType == "MI" or paradigmType == "motor imagery"
-    print("Going to run the MI example file" )
-    filename = "examples/data/mi_example.xdf"
-
-    elif paradigmType == "switch" or paradigmType == "Switch"  or paradigmType == "sw"
-    print("Going to run the switch example file" )
-    filename = "examples/data/switch_example.xdf"
+    elif paradigmType == "switch" or paradigmType == "Switch"  or paradigmType == "sw":
+        print("Going to run the switch example file" )
+        filename = "examples/data/switch_example.xdf"
 
 
 except:
@@ -94,7 +94,7 @@ fs_marker = round(len(marker_time_stamps) / (time_stop - time_start))
 fs_eeg = round(len(eeg_time_stamps) / (time_stop - time_start))
 
 # create the eeg stream
-info = StreamInfo('MockEEG', 'EEG', 8, fs_eeg, 'float32', 'mockeeg1')
+info = StreamInfo('MockEEG', 'EEG', eeg_stream.nchannels, fs_eeg, 'float32', 'mockeeg1')
 
 # add channel data
 channels = info.desc().append_child("channels")
