@@ -48,7 +48,27 @@ except:
     nloops = 1
 
 # Identify the file to simulate
-filename = "examples/data/p300_example.xdf"
+try:
+    paradigmType = sys.argv[3]
+    if paradigmType == "p" or paradigmType == "p300"  or paradigmType == "P300"
+    print("Going to run the P300 example file" )
+    filename = "examples/data/p300_example.xdf"
+
+    elif paradigmType == "ssvep" or paradigmType == "SSVEP"  or paradigmType == "vep"
+    print("Going to run the SSVEP example file" )
+    filename = "examples/data/ssvep_example.xdf"
+
+    elif paradigmType == "m" or paradigmType == "mi"  or paradigmType == "MI" or paradigmType == "motor imagery"
+    print("Going to run the MI example file" )
+    filename = "examples/data/mi_example.xdf"
+
+    elif paradigmType == "switch" or paradigmType == "Switch"  or paradigmType == "sw"
+    print("Going to run the switch example file" )
+    filename = "examples/data/switch_example.xdf"
+
+
+except:
+    filename = "examples/data/p300_example.xdf"
 
 # Load the example EEG stream
 eeg_stream = EEG_data()
