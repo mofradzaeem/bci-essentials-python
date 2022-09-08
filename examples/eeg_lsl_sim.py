@@ -65,9 +65,11 @@ try:
     elif paradigmType == "switch" or paradigmType == "Switch"  or paradigmType == "sw":
         print("Going to run the switch example file" )
         filename = "examples/data/switch_example.xdf"
-
+    else:
+        filename = "examples/data/p300_example.xdf"
 
 except:
+    print("Error caught - using p300 as default")
     filename = "examples/data/p300_example.xdf"
 
 # Load the example EEG stream
