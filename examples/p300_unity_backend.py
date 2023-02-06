@@ -26,4 +26,4 @@ test_erp.stream_online_eeg_data() # you can also add a subset here
 
 # Run main
 # test_erp.main(online=True, training=True, pp_low=0.1, pp_high=15, pp_order=5, plot_erp=False, window_start=0.0, window_end=0.6)
-test_erp.main(online=True, training=True, pp_low=0.1, pp_high=10, pp_order=5, plot_erp=False, window_start=0.0, window_end=0.8, print_markers=False, print_training=False, print_fit=False, print_performance=True, print_predict=False)
+test_erp.main(online=True, training=True, pp_low=0.1, pp_high=10, pp_order=5, plot_erp=False, window_start=0.0, window_end=0.8, print_markers=True, print_training=True, print_fit=True, print_performance=True, print_predict=True)
