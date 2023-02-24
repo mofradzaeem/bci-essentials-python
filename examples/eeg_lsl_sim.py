@@ -48,7 +48,9 @@ except:
     nloops = 1
 
 # Identify the file to simulate
-filename = "examples/data/p300_example.xdf"
+# filename = "examples/data/p300_example.xdf"
+filename = "examples/data/ssvep_example.xdf"
+
 
 # Load the example EEG stream
 eeg_stream = EEG_data()
@@ -74,7 +76,8 @@ fs_marker = round(len(marker_time_stamps) / (time_stop - time_start))
 fs_eeg = round(len(eeg_time_stamps) / (time_stop - time_start))
 
 # create the eeg stream
-info = StreamInfo('MockEEG', 'EEG', 8, fs_eeg, 'float32', 'mockeeg1')
+# info = StreamInfo('MockEEG', 'EEG', 8, fs_eeg, 'float32', 'mockeeg1')
+info = StreamInfo('MockEEG', 'EEG', 16, fs_eeg, 'float32', 'mockeeg1')
 
 # add channel data
 channels = info.desc().append_child("channels")
