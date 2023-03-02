@@ -747,10 +747,6 @@ class ssvep_cca_classifier(generic_classifier):
         self.clf_model = Pipeline([("CCA", cca)])
         self.clf = Pipeline([("CCA", cca)])
 
-        # self.clf_model = Pipeline([("MDM", mdm)])
-        # self.clf = Pipeline([("MDM", mdm)])
-
-
     def fit(self, print_fit=True, print_performance=True):
         # get dimensions
         X = self.X
@@ -769,77 +765,51 @@ class ssvep_cca_classifier(generic_classifier):
         suby = self.y[self.next_fit_window:]
         self.next_fit_window = nwindows
 
+        # Preprocess data
+        subX = bandpass(subX, f_low=1, f_high=40, order=4, fsample=self.sampling_freq)
+
         # Init predictions to all false 
         preds = np.zeros(nwindows)
 
-        def sine_cosine(f_target, fs, n_samples):
+        def ref_gen(f_target, fs, n_samples, n_harmonics):
             """
-                Returns a sine and cosine signal
+                Generates a reference signal with harmonics. Reference includes a sine and cosine signal
             """
 
-            waves = np.zeros((2, n_samples))
+            waves = np.zeros((2*n_harmonics, n_samples))
             t = np.linspace(0, n_samples/fs, n_samples)
-            waves[0,:] = np.sin(2*np.pi*f_target*t)
-            waves[1,:] = np.cos(2*np.pi*f_target*t)
+
+            for h in range(n_harmonics):
+                waves[2*h,:] = np.sin(2*np.pi*t*(f_target+h*f_target))
+                waves[2*h+1,:] = np.cos(2*np.pi*t*(f_target+h*f_target))
 
             return waves
-        
-        n_harmonics = 3
-        y_waves = np.zeros((2, n_harmonics, len(self.target_freqs), nsamples))
-        for f, freq in enumerate(self.target_freqs):
-            for h in range(n_harmonics):
-                y_waves[:,h,f,:] = sine_cosine(freq + h*freq, self.sampling_freq, nsamples)
-        y_waves = np.reshape(y_waves, (n_harmonics*len(self.target_freqs*2), -1), order="F")
-
-
-        cca1 = CCA(n_components=1)
-        cca2 = CCA(n_components=1)
-        cca3 = CCA(n_components=1)
-
-        n_freqs = self.target_freqs
-        rho = np.zeros(n_freqs)
-
-        for f in len(n_freqs):
-
-            # Generate ref signals
-            y_ref = np.zeros(2,n_harmonics,nsamples)
-            for h in range(n_harmonics):
-                y_ref[:,h,:] = sine_cosine(freq + h*freq, self.sampling_freq, nsamples)
-            y_ref = np.reshape(y_ref, (n_harmonics*2, -1), order="F")
-
-            x_temp = np.squeeze(subX[0,:,:].T)
-            cca = CCA(n_components=1)
-            cca.fit(x_temp, y_ref)
-            [x_scores, y_scores] = cca.transform(x_temp, y_ref)
-
-        
+               
 
         def ssvep_kernel(subX, suby):
-            for train_idx, test_idx in self.cv.split(subX,suby):
-                self.clf = self.clf_model
+            # Generate reference signals and CCA objects
+            n_harmonics = 3
+            freqs = self.target_freqs
+            n_freqs = len(freqs)
+            n_comp = 1
+            y_ref = np.zeros((n_freqs, 2*n_harmonics, nsamples))
+            cca_list = [None] * n_freqs
+            for f, freq in enumerate(freqs):
+                y_ref[f,:,:] = ref_gen(freq, self.sampling_freq, nsamples, n_harmonics)
+                cca_list[f] = CCA(n_components=n_comp)
 
-                X_train, X_test = subX[train_idx], subX[test_idx]
-                y_train, y_test = suby[train_idx], suby[test_idx]
+            # Predict using CCA
+            for w in range(nwindows):
+                corrs = np.zeros(n_freqs)
+                for f, freq in enumerate(freqs):
+                    xtemp = subX[w,:,:].T
+                    ytemp = y_ref[f,:,:].T
+                    cca_list[f].fit(xtemp, ytemp)
+                    [x_scores, y_scores] = cca_list[f].transform(xtemp, ytemp)
+                    corrs[f] = np.corrcoef(np.squeeze(x_scores), np.squeeze(y_scores))[0,1]
 
-                X_train_psd = psd(X_train, self)
-
-                # get the covariance matrices for the training set
-                # X_train_super = get_ssvep_supertrial(X_train, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width, covariance_estimator=self.covariance_estimator)
-                # X_test_super = get_ssvep_supertrial(X_test, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width, covariance_estimator=self.covariance_estimator)
-
-                # X_train_cov = Covariances(estimator=self.covariance_estimator).transform(X_train)
-                # X_test_cov = Covariances(estimator=self.covariance_estimator).transform(X_test)
-
-                # X_train_cov_mean = np.mean(X_train_cov, axis=-1)
-                # X_test_cov_mean = np.mean(X_test_cov, axis=-1)
-
-                X_train = np.reshape(X_train, [np.shape(X_train)[0], -1])
-                X_test = np.reshape(X_test, [np.shape(X_test)[0], -1])
-                # fit the classsifier
-                # self.clf.fit(X_train, y_train)
-                self.clf.fit(X_train, y_train)
-                # preds[test_idx] = self.clf.predict(X_test_super)
-                preds[test_idx] = np.squeeze(self.clf.predict(X_test))
+                # Vote on the most likely value as the prediction
+                preds[w] = np.argmax([corrs])
 
             accuracy = sum(preds == self.y)/len(preds)
             precision = precision_score(self.y,preds, average="micro")
