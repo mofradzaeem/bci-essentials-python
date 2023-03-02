@@ -613,7 +613,7 @@ class EEG_data():
 
             new_window = bandpass(window, fl, fh, order, self.fsample)
             return new_window
-
+        
         # other preprocessing options go here
 
     # Artefact rejection goes here (windows are nchannels by nsamples)
@@ -938,6 +938,9 @@ class EEG_data():
                         
                         # PREDICT
                         elif train_complete == True and current_nwindows != 0:
+                            # Save ML model to file
+                            # save_model(self, self.user_id)
+
                             if print_predict:
                                 print("making a prediction based on ", current_nwindows ," windows")
 

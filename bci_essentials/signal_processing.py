@@ -213,3 +213,33 @@ def notchfilt(data, fsample, Q=30, fc=60):
         new_data = np.ndarray(shape=(N, M), dtype=float) 
         new_data = signal.filtfilt(b, a, data, axis=1, padlen=30)
         return new_data
+    
+def psd(data:np.ndarray, fsample:float):
+    """
+        Computes the Power Spectral Density (PSD) of the data in a per channel basis
+
+        Parameters
+        ----------
+            data: np.array
+                EEG data to compute the PSD
+            fsample: float
+                Sampling rate [Hz]
+
+        Returns
+        -------
+            psd_data: np.ndarray
+                PSD of the input data with the same shape as the input data
+    """
+
+    # Make sure the array is in shape [chans, samples]
+    # data_shape = np.shape(data)
+    # if data_shape[0] > data_shape[1]:
+    #     transpose_flag = True
+    #     data = data.T
+
+    psd_data = signal.welch(data, fs=fsample, nperseg=np.shape(data)[-1])
+
+    # if transpose_flag:
+    #     data = data.T
+
+    return pds_data

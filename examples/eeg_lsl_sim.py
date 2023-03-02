@@ -48,11 +48,13 @@ except:
     nloops = 1
 
 # Identify the file to simulate
-filename = "examples/data/p300_example.xdf"
+# filename = "examples/data/p300_example.xdf"
+filename = "C:/Users/danie/Documents/Projects/bci-essentials-python/examples/data/brian_ssvep_data.xdf"
 
 # Load the example EEG stream
 eeg_stream = EEG_data()
 eeg_stream.load_offline_eeg_data(filename)
+
 
 # Get the data from that stream
 marker_time_stamps = eeg_stream.marker_timestamps
@@ -74,7 +76,7 @@ fs_marker = round(len(marker_time_stamps) / (time_stop - time_start))
 fs_eeg = round(len(eeg_time_stamps) / (time_stop - time_start))
 
 # create the eeg stream
-info = StreamInfo('MockEEG', 'EEG', 8, fs_eeg, 'float32', 'mockeeg1')
+info = StreamInfo('MockEEG', 'EEG', eeg_stream.nchannels+1, fs_eeg, 'float32', 'mockeeg1')
 
 # add channel data
 channels = info.desc().append_child("channels")
