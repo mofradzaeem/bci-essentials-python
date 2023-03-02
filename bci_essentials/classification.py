@@ -13,10 +13,13 @@ Classification Tools
 import string
 import numpy as np
 import random
+import pickle
+import datetime
 
 from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.linear_model import LogisticRegression
+from sklearn.cross_decomposition import CCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.utils import resample
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, precision_score, recall_score, accuracy_score
@@ -41,6 +44,25 @@ from scipy import signal
 from bci_essentials.visuals import *
 from bci_essentials.signal_processing import *
 from bci_essentials.channel_selection import *
+
+def save_model(classifier, file_name):
+    """
+        Saves ML model to .sav file
+
+        Parameters
+        ----------
+            classifier: Classifier object, can be any type of classifier from `classification.py`
+            file_name: File name 
+    """
+    # Create dictionary object with ML model
+    output = {}
+    output['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    output['model'] = classifier
+
+    # Save pickle file
+    file = open(f"..\\{file_name}.sav")
+    pickle.dump(output, file)
+    
 
 # TODO : move this to signal processing???
 def lico(X,y,expansion_factor=3, sum_num=2, shuffle=False):
@@ -622,6 +644,202 @@ class ssvep_riemannian_mdm_classifier(generic_classifier):
                 # fit the classsifier
                 self.clf.fit(X_train_super, y_train)
                 preds[test_idx] = self.clf.predict(X_test_super)
+
+            accuracy = sum(preds == self.y)/len(preds)
+            precision = precision_score(self.y,preds, average="micro")
+            recall = recall_score(self.y, preds, average="micro")
+
+            model = self.clf
+
+            return model, preds, accuracy, precision, recall
+
+        # Check if channel selection is true
+        if self.channel_selection_setup:
+            print("Doing channel selection")
+
+            updated_subset, updated_model, preds, accuracy, precision, recall = channel_selection_by_method(ssvep_kernel, self.X, self.y, self.channel_labels,             # kernel setup
+                                                                            self.chs_method, self.chs_metric, self.chs_initial_subset,                                      # wrapper setup
+                                                                            self.chs_max_time, self.chs_min_channels, self.chs_max_channels, self.chs_performance_delta,    # stopping criterion
+                                                                            self.chs_n_jobs, self.chs_output) 
+                
+            print("The optimal subset is ", updated_subset)
+
+            self.subset = updated_subset
+            self.clf = updated_model
+        else: 
+            print("Not doing channel selection")
+            self.clf, preds, accuracy, precision, recall= ssvep_kernel(subX, suby)
+
+        # Print performance stats
+
+        self.offline_window_count = nwindows
+        self.offline_window_counts.append(self.offline_window_count)
+
+        # accuracy
+        accuracy = sum(preds == self.y)/len(preds)
+        self.offline_accuracy.append(accuracy)
+        if print_performance:
+            print("accuracy = {}".format(accuracy))
+
+        # precision
+        precision = precision_score(self.y, preds, average='micro')
+        self.offline_precision.append(precision)
+        if print_performance:
+            print("precision = {}".format(precision))
+
+        # recall
+        recall = recall_score(self.y, preds, average='micro')
+        self.offline_recall.append(recall)
+        if print_performance:
+            print("recall = {}".format(recall))
+
+        # confusion matrix in command line
+        cm = confusion_matrix(self.y, preds)
+        self.offline_cm = cm
+        if print_performance:
+            print("confusion matrix")
+            print(cm)
+
+    def predict(self, X, print_predict=True):
+        # if X is 2D, make it 3D with one as first dimension
+        if len(X.shape) < 3:
+            X = X[np.newaxis, ...]
+
+        X = self.get_subset(X)
+
+        if print_predict:
+            print("the shape of X is", X.shape)
+
+        X_super = get_ssvep_supertrial(X, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width)
+
+        pred = self.clf.predict(X_super)
+        pred_proba = self.clf.predict_proba(X_super)
+
+        if print_predict:
+            print(pred)
+            print(pred_proba)
+
+        for i in range(len(pred)):
+            self.predictions.append(pred[i])
+            self.pred_probas.append(pred_proba[i])
+
+        return pred
+    
+class ssvep_cca_classifier(generic_classifier):
+    """
+    Classifies SSVEP based on Canonical correlation analysis (CCA)
+    """
+
+    def set_ssvep_settings(self, n_splits=3, random_seed=42, n_harmonics=2, f_width=0.2, covariance_estimator="scm"):
+        # Build the cross-validation split
+        self.n_splits = n_splits
+        self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+        self.rebuild = True
+
+        self.n_harmonics = n_harmonics
+        self.f_width = f_width
+        self.covariance_estimator = covariance_estimator
+
+        # Use an MDM classifier, maybe there will be other options later
+        mdm = MDM(metric=dict(mean='riemann', distance='riemann'), n_jobs = 1)
+        cca = CCA(n_components=3)
+        self.clf_model = Pipeline([("CCA", cca)])
+        self.clf = Pipeline([("CCA", cca)])
+
+        # self.clf_model = Pipeline([("MDM", mdm)])
+        # self.clf = Pipeline([("MDM", mdm)])
+
+
+    def fit(self, print_fit=True, print_performance=True):
+        # get dimensions
+        X = self.X
+
+        # Convert each window of X into a SPD of dimensions [nwindows, nchannels*nfreqs, nchannels*nfreqs]
+        nwindows, nchannels, nsamples = self.X.shape 
+
+        #################
+        # Try rebuilding the classifier each time
+        if self.rebuild == True:
+            self.next_fit_window = 0
+            self.clf = self.clf_model
+
+        # get temporal subset
+        subX = self.X[self.next_fit_window:,:,:]
+        suby = self.y[self.next_fit_window:]
+        self.next_fit_window = nwindows
+
+        # Init predictions to all false 
+        preds = np.zeros(nwindows)
+
+        def sine_cosine(f_target, fs, n_samples):
+            """
+                Returns a sine and cosine signal
+            """
+
+            waves = np.zeros((2, n_samples))
+            t = np.linspace(0, n_samples/fs, n_samples)
+            waves[0,:] = np.sin(2*np.pi*f_target*t)
+            waves[1,:] = np.cos(2*np.pi*f_target*t)
+
+            return waves
+        
+        n_harmonics = 3
+        y_waves = np.zeros((2, n_harmonics, len(self.target_freqs), nsamples))
+        for f, freq in enumerate(self.target_freqs):
+            for h in range(n_harmonics):
+                y_waves[:,h,f,:] = sine_cosine(freq + h*freq, self.sampling_freq, nsamples)
+        y_waves = np.reshape(y_waves, (n_harmonics*len(self.target_freqs*2), -1), order="F")
+
+
+        cca1 = CCA(n_components=1)
+        cca2 = CCA(n_components=1)
+        cca3 = CCA(n_components=1)
+
+        n_freqs = self.target_freqs
+        rho = np.zeros(n_freqs)
+
+        for f in len(n_freqs):
+
+            # Generate ref signals
+            y_ref = np.zeros(2,n_harmonics,nsamples)
+            for h in range(n_harmonics):
+                y_ref[:,h,:] = sine_cosine(freq + h*freq, self.sampling_freq, nsamples)
+            y_ref = np.reshape(y_ref, (n_harmonics*2, -1), order="F")
+
+            x_temp = np.squeeze(subX[0,:,:].T)
+            cca = CCA(n_components=1)
+            cca.fit(x_temp, y_ref)
+            [x_scores, y_scores] = cca.transform(x_temp, y_ref)
+
+        
+
+        def ssvep_kernel(subX, suby):
+            for train_idx, test_idx in self.cv.split(subX,suby):
+                self.clf = self.clf_model
+
+                X_train, X_test = subX[train_idx], subX[test_idx]
+                y_train, y_test = suby[train_idx], suby[test_idx]
+
+                X_train_psd = psd(X_train, self)
+
+                # get the covariance matrices for the training set
+                # X_train_super = get_ssvep_supertrial(X_train, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width, covariance_estimator=self.covariance_estimator)
+                # X_test_super = get_ssvep_supertrial(X_test, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width, covariance_estimator=self.covariance_estimator)
+
+                # X_train_cov = Covariances(estimator=self.covariance_estimator).transform(X_train)
+                # X_test_cov = Covariances(estimator=self.covariance_estimator).transform(X_test)
+
+                # X_train_cov_mean = np.mean(X_train_cov, axis=-1)
+                # X_test_cov_mean = np.mean(X_test_cov, axis=-1)
+
+                X_train = np.reshape(X_train, [np.shape(X_train)[0], -1])
+                X_test = np.reshape(X_test, [np.shape(X_test)[0], -1])
+                # fit the classsifier
+                # self.clf.fit(X_train, y_train)
+                self.clf.fit(X_train, y_train)
+                # preds[test_idx] = self.clf.predict(X_test_super)
+                preds[test_idx] = np.squeeze(self.clf.predict(X_test))
 
             accuracy = sum(preds == self.y)/len(preds)
             precision = precision_score(self.y,preds, average="micro")
