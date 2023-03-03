@@ -736,7 +736,7 @@ class ssvep_ts_classifier(generic_classifier):
 
     #TODO - Put in the SSVEP setting options for different types of loss (default to log_loss for probabilities output), l1_ratio, and other factors for this classifier
     
-    def set_ssvep_settings(self, n_splits=3, random_seed=42, n_harmonics=2, f_width=0.2, covariance_estimator="scm"):
+    def set_ssvep_settings(self, n_splits=3, random_seed=42, n_harmonics=2, f_width=0.2, covariance_estimator="scm", sgd_loss = "hinge",l1_ratio = 0.15, penalty = 'L2'):
         # Build the cross-validation split
         self.n_splits = n_splits
         self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
@@ -746,10 +746,10 @@ class ssvep_ts_classifier(generic_classifier):
         self.n_harmonics = n_harmonics
         self.f_width = f_width
         self.covariance_estimator = covariance_estimator
+        self.loss = sgd_loss
 
         # Use an TS classifier with SVC afterwards, maybe there will be other options later
-        # mdm = MDM(metric=dict(mean='riemann', distance='riemann'), n_jobs = 1)
-        ts = TSclassifier(metric='riemann',clf=SGDClassifier(loss='log_loss',l1_ratio=0.5))
+        ts = TSclassifier(metric='riemann',clf=SGDClassifier(loss=sgd_loss,l1_ratio=l1_ratio,random_state=random_seed,penalty=penalty))
         self.clf_model = Pipeline([("TS",ts)])
         self.clf = Pipeline([("TS",ts)])
 
@@ -783,10 +783,6 @@ class ssvep_ts_classifier(generic_classifier):
 
                 X_train, X_test = subX[train_idx], subX[test_idx]
                 y_train, y_test = suby[train_idx], suby[test_idx]
-
-                # get the covariance matrices for the training set
-                # X_train_super = get_ssvep_supertrial(X_train, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width, covariance_estimator=self.covariance_estimator)
-                # X_test_super = get_ssvep_supertrial(X_test, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width, covariance_estimator=self.covariance_estimator)
 
                 # get the covariance matrices for the training set
                 X_train_cov = Covariances(estimator=self.covariance_estimator).transform(X_train)
@@ -862,22 +858,91 @@ class ssvep_ts_classifier(generic_classifier):
             print("the shape of X is", X.shape)
 
         #Need to get the data into a covariance matrix to make it the right shape
-        
-        # X_super = get_ssvep_supertrial(X, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width)
         X_cov = Covariances(estimator=self.covariance_estimator).transform(X)
         
-        pred = self.clf.predict(X_cov)
-        pred_proba = self.clf.predict_proba(X_cov)
+        if(self.loss == 'hinge' or self.loss == 'squared_hinge'):
+            #Won't return any probabilities
+            print("No probabilities will be returned - using hinge-type loss")
+            pred = self.clf.predict(X_cov)
+            
+            if print_predict:
+                print(pred)
+                
+            for i in range(len(pred)):
+                self.predictions.append(pred[i])
+                
+            return pred
+            
+            
+        else:
+            pred = self.clf.predict(X_cov)
+            pred_proba = self.clf.predict_proba(X_cov) 
 
-        if print_predict:
-            print(pred)
-            print(pred_proba)
+            if print_predict:
+                print(pred)
+                print(pred_proba)
 
-        for i in range(len(pred)):
-            self.predictions.append(pred[i])
-            self.pred_probas.append(pred_proba[i])
+            for i in range(len(pred)):
+                self.predictions.append(pred[i])
+                self.pred_probas.append(pred_proba[i])
 
-        return pred
+            return pred
+   
+           
+# Train free classifier
+# SSVEP CCA Classifier Sans Training
+class ssvep_basic_classifier_tf(generic_classifier):
+    """
+    Classifies SSVEP based on relative bandpower, taking only the maximum
+    """
+
+    def set_ssvep_settings(self, sampling_freq, target_freqs):
+        self.sampling_freq = sampling_freq
+        self.target_freqs = target_freqs
+        self.setup = False
+
+    def fit(self, print_fit=True, print_performance=True):
+        print("Oh deary me you must have mistaken me for another classifier which requires training")
+        print("I DO NOT NEED TRAINING.")
+        print("THIS IS MY FINAL FORM")
+
+    
+
+    def predict(self, X, print_predict):
+        # get the shape
+        nwindows, nchannels, nsamples = X.shape
+        # The first time it is called it must be set up
+        if self.setup == False:
+            print("setting up the training free classifier")
+
+            self.setup = True
+
+        # Build one augmented channel, here by just adding them all together
+        X = np.mean(X, axis=1)
+
+        # Get the PSD estimate using Welch's method
+        f, Pxx = signal.welch(X, fs=self.sampling_freq, nperseg=256)
+        
+        # Get a vote for each window
+        votes = np.ndarray(nwindows)
+        for w in range(nwindows):
+            # Get the frequency with the greatest PSD
+            max_psd_freq = f[np.where(Pxx[w,:] == np.amax(Pxx[w,:]))]
+
+
+            dist = np.ndarray((len(self.target_freqs), 1))
+
+            # Calculate the minimum distance from each of the target freqs to the max_psd_freq
+            for tf in self.target_freqs:
+                dist = np.abs(max_psd_freq - tf)
+
+            votes[np.where(dist == np.amin(dist))] += 1
+            
+        prediction = np.where(votes == np.amax(votes))
+
+        print(prediction)
+
+        return int(prediction)
 
     
 class ssvep_cca_classifier(generic_classifier):
@@ -885,24 +950,35 @@ class ssvep_cca_classifier(generic_classifier):
     Classifies SSVEP based on Canonical correlation analysis (CCA)
     """
 
-    def set_ssvep_settings(self, n_splits=3, random_seed=42, n_harmonics=2, f_width=0.2, covariance_estimator="scm"):
-        # # Build the cross-validation split - EKL edit - not needed
-        # self.n_splits = n_splits
-        # self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+    def set_ssvep_settings(self, target_freqs, n_harmonics=2, f_width=0.2, covariance_estimator="scm", n_components = 3, f_low = 0.1, f_high=30, bp_order=5, cca_scale=True, cca_maxitr=500, cca_tol = 1e-06):
 
+        #Basic required variables
         self.rebuild = True
-
+        #Variables needed for CCA implementation below
+        self.target_freqs = target_freqs
         self.n_harmonics = n_harmonics
         self.f_width = f_width
+        self.f_low = f_low
+        self.f_high = f_high
+        self.bp_order = bp_order
+        #Covariance variables
         self.covariance_estimator = covariance_estimator
+        #CCA Variables
+        self.n_components = n_components
+        self.cca_scale = cca_scale
+        self.cca_maxitr = cca_maxitr
+        self.cca_tol = cca_tol
+        
 
-        # Use an MDM classifier, maybe there will be other options later
-        mdm = MDM(metric=dict(mean='riemann', distance='riemann'), n_jobs = 1)
-        cca = CCA(n_components=3)
+        # Use a a CCA Classifier
+        cca = CCA(n_components=self.n_components,scale=self.cca_scale,max_iter=self.cca_maxitr,tol=self.cca_tol)
         self.clf_model = Pipeline([("CCA", cca)])
         self.clf = Pipeline([("CCA", cca)])
-
+        
     def fit(self, print_fit=True, print_performance=True):
+        print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
+
+    def predict(self, X, print_fit=True, print_performance=True):
         # get dimensions
         X = self.X
 
@@ -1021,7 +1097,7 @@ class ssvep_cca_classifier(generic_classifier):
             print("confusion matrix")
             print(cm)
 
-    def predict(self, X, print_predict=True):
+    def predict_old(self, X, print_predict=True):
         # if X is 2D, make it 3D with one as first dimension
         if len(X.shape) < 3:
             X = X[np.newaxis, ...]
@@ -1053,72 +1129,189 @@ class ssvep_cca2_classifier(generic_classifier):
     Returns:
         _type_: prediction value for the SSVEP based on class
     """
-    
-    def set_ssvep_settings(self,sampling_freq,target_freqs,n_harmonics=2, f_width=0.2, covariance_estimator="scm"):
-        self.sampling_freq = sampling_freq
+    def set_ssvep_settings(self, target_freqs, n_harmonics=2, f_width=0.2, covariance_estimator="scm", n_components = 3, f_low = 0.1, f_high=30, bp_order=5, cca_scale=True, cca_maxitr=500, cca_tol = 1e-06, use_subset = False):
+
+        #Default variables
+        self.use_subset = use_subset
+        #Variables needed for CCA implementation below
         self.target_freqs = target_freqs
-        self.setup = False
+        self.n_harmonics = n_harmonics
+        self.f_width = f_width
+        self.f_low = f_low
+        self.f_high = f_high
+        self.bp_order = bp_order
+        #Covariance variables
+        self.covariance_estimator = covariance_estimator
+        #CCA Variables
+        self.n_components = n_components
+        self.cca_scale = cca_scale
+        self.cca_maxitr = cca_maxitr
+        self.cca_tol = cca_tol
+        
+
+        # Use a a CCA Classifier. Should probably have less code repeition and just pass in classifiers to use. Will update later
+        #TODO - Make this more flexible with other classifiers.
+        cca = CCA(n_components=self.n_components,scale=self.cca_scale,max_iter=self.cca_maxitr,tol=self.cca_tol)
+        self.clf_model = Pipeline([("CCA", cca)])
+        self.clf = Pipeline([("CCA", cca)])
         
     def fit(self, print_fit=True, print_performance=True):
         print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
-      
-    
+
+    def predict(self, X, print_fit=True, print_performance=True, print_predict=True):
+        # if X is 2D, make it 3D with one as first dimension 
+        # EKL Edit - UNSURE IF THIS IS NEEDED
+        if len(X.shape) < 3:
+            X = X[np.newaxis, ...]
+
+        #Get X value
+        if(self.use_subset):
+            X = self.get_subset(X)
+        else:
+            X = self.X
+
+        # Convert each window of X into a SPD of dimensions [nwindows, nchannels*nfreqs, nchannels*nfreqs]
+        nwindows, nchannels, nsamples = self.X.shape 
         
-# Train free classifier
-# SSVEP CCA Classifier Sans Training
-class ssvep_basic_classifier_tf(generic_classifier):
-    """
-    Classifies SSVEP based on relative bandpower, taking only the maximum
-    """
-
-    def set_ssvep_settings(self, sampling_freq, target_freqs):
-        self.sampling_freq = sampling_freq
-        self.target_freqs = target_freqs
-        self.setup = False
-
-    def fit(self, print_fit=True, print_performance=True):
-        print("Oh deary me you must have mistaken me for another classifier which requires training")
-        print("I DO NOT NEED TRAINING.")
-        print("THIS IS MY FINAL FORM")
-
-    
-
-    def predict(self, X, print_predict):
-        # get the shape
-        nwindows, nchannels, nsamples = X.shape
-        # The first time it is called it must be set up
+        if print_predict:
+            print("the shape of X is", X.shape)
+        
+        #################            
         if self.setup == False:
             print("setting up the training free classifier")
 
             self.setup = True
 
-        # Build one augmented channel, here by just adding them all together
-        X = np.mean(X, axis=1)
-
-        # Get the PSD estimate using Welch's method
-        f, Pxx = signal.welch(X, fs=self.sampling_freq, nperseg=256)
+        # get temporal subset
+        #EKL Comment - I don't think we need this....
+        # subX = self.X[self.next_fit_window:,:,:]
+        # suby = self.y[self.next_fit_window:]
+        self.next_fit_window = nwindows
+        subX = self.X
+        suby = self.y
         
-        # Get a vote for each window
-        votes = np.ndarray(nwindows)
-        for w in range(nwindows):
-            # Get the frequency with the greatest PSD
-            max_psd_freq = f[np.where(Pxx[w,:] == np.amax(Pxx[w,:]))]
+        # Preprocess data
+        subX = bandpass(subX, f_low=self.f_low, f_high=self.f_high, order=self.bp_order, fsample=self.sampling_freq)
+
+        # Init predictions to all false - Again, this is initing to 0, ,which may not be false 
+        preds = np.zeros(nwindows)
+
+        #EKL Comment I kind of hate this is a definition within the predict definition...
+        def ref_gen(f_target, fs, n_samples, n_harmonics):
+            """
+                Generates a reference signal with harmonics. Reference includes a sine and cosine signal
+            """
+
+            waves = np.zeros((2*n_harmonics, n_samples))
+            t = np.linspace(0, n_samples/fs, n_samples)
+
+            for h in range(n_harmonics):
+                waves[2*h,:] = np.sin(2*np.pi*t*(f_target+h*f_target))
+                waves[2*h+1,:] = np.cos(2*np.pi*t*(f_target+h*f_target))
+
+            return waves
+               
+        #TODO - Remove the suby call here, as it isn't being used. We are generating y separately.
+        def ssvep_kernel(subX, suby):
+            # Generate reference signals and CCA objects
+            n_harmonics = self.n_harmonics #Was 3
+            freqs = self.target_freqs
+            n_freqs = len(freqs)
+            n_comp = self.n_components #was at 1 before
+            y_ref = np.zeros((n_freqs, 2*n_harmonics, nsamples))
+            cca_list = [None] * n_freqs
+            for f, freq in enumerate(freqs):
+                y_ref[f,:,:] = ref_gen(freq, self.sampling_freq, nsamples, n_harmonics)
+                cca_list[f] = CCA(n_components=n_comp)
+
+            # Predict using CCA
+            for w in range(nwindows):
+                corrs = np.zeros(n_freqs)
+                for f, freq in enumerate(freqs):
+                    xtemp = subX[w,:,:].T
+                    ytemp = y_ref[f,:,:].T
+                    cca_list[f].fit(xtemp, ytemp)
+                    [x_scores, y_scores] = cca_list[f].transform(xtemp, ytemp)
+                    corrs[f] = np.corrcoef(np.squeeze(x_scores), np.squeeze(y_scores))[0,1]
+
+                # Vote on the most likely value as the prediction
+                preds[w] = np.argmax([corrs])
+
+            accuracy = sum(preds == self.y)/len(preds)
+            precision = precision_score(self.y,preds, average="micro")
+            recall = recall_score(self.y, preds, average="micro")
+
+            model = self.clf
+
+            return model, preds, accuracy, precision, recall
+
+        # Check if channel selection is true
+        if self.channel_selection_setup:
+            print("Doing channel selection")
+
+            updated_subset, updated_model, preds, accuracy, precision, recall = channel_selection_by_method(ssvep_kernel, self.X, self.y, self.channel_labels,             # kernel setup
+                                                                            self.chs_method, self.chs_metric, self.chs_initial_subset,                                      # wrapper setup
+                                                                            self.chs_max_time, self.chs_min_channels, self.chs_max_channels, self.chs_performance_delta,    # stopping criterion
+                                                                            self.chs_n_jobs, self.chs_output) 
+                
+            print("The optimal subset is ", updated_subset)
+
+            self.subset = updated_subset
+            self.clf = updated_model
+        else: 
+            print("Not doing channel selection")
+            self.clf, preds, accuracy, precision, recall= ssvep_kernel(subX, suby)
+
+        # Print performance stats
+
+        self.offline_window_count = nwindows
+        self.offline_window_counts.append(self.offline_window_count)
+
+        # accuracy
+        accuracy = sum(preds == self.y)/len(preds)
+        self.offline_accuracy.append(accuracy)
+        if print_performance:
+            print("accuracy = {}".format(accuracy))
+
+        # precision
+        precision = precision_score(self.y, preds, average='micro')
+        self.offline_precision.append(precision)
+        if print_performance:
+            print("precision = {}".format(precision))
+
+        # recall
+        recall = recall_score(self.y, preds, average='micro')
+        self.offline_recall.append(recall)
+        if print_performance:
+            print("recall = {}".format(recall))
+
+        # confusion matrix in command line
+        cm = confusion_matrix(self.y, preds)
+        self.offline_cm = cm
+        if print_performance:
+            print("confusion matrix")
+            print(cm)
+
+    def predict_old(self, X, print_predict=True):
 
 
-            dist = np.ndarray((len(self.target_freqs), 1))
+        pred = self.clf.predict(X)
+        pred_proba = self.clf.predict_proba(X)
 
-            # Calculate the minimum distance from each of the target freqs to the max_psd_freq
-            for tf in self.target_freqs:
-                dist = np.abs(max_psd_freq - tf)
+        if print_predict:
+            print(pred)
+            print(pred_proba)
 
-            votes[np.where(dist == np.amin(dist))] += 1
-            
-        prediction = np.where(votes == np.amax(votes))
+        for i in range(len(pred)):
+            self.predictions.append(pred[i])
+            self.pred_probas.append(pred_proba[i])
 
-        print(prediction)
-
-        return int(prediction)
-
+        return pred
+    
+    
+    
+    
+    
 # TODO : Add a SSVEP CCA Classifier
 
 # class ssvep_rg_classifier(generic_classifier):

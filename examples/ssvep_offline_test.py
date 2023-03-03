@@ -23,13 +23,13 @@ test_ssvep = EEG_data()
 # test_ssvep.classifier = ssvep_riemannian_mdm_classifier(subset=[])
 test_ssvep.classifier = ssvep_ts_classifier(subset=[])
 
-fn = "Z:\BCI Program\BCI Studies\Boccia_Software_Pilot-March2023\Data\sub-P001\ses-S002\eeg\sub-P001_ses-S002_task-T1_run-001_eeg.xdf"
+fn = "Z:\BCI Program\BCI Studies\Boccia_Software_Pilot-March2023\Data\sub-P003\ses-S003\eeg\sub-P003_ses-S003_task-T1_run-001_eeg.xdf"
 
 # Load from xdf into erp_data format
 # test_ssvep.load_offline_eeg_data(filename = "examples/data/adam_ssvep_boccia.xdf", format='xdf')
 test_ssvep.load_offline_eeg_data(filename = fn,format='xdf')
 
-test_ssvep.classifier.set_ssvep_settings(n_splits=3, random_seed=42, n_harmonics=2, f_width=1.0,covariance_estimator='oas')
+test_ssvep.classifier.set_ssvep_settings(n_splits=3, random_seed=42, n_harmonics=2, f_width=1.0,covariance_estimator='oas',sgd_loss='squared_hinge',l1_ratio=0.15,penalty='elasticnet')
 
 # initial_subset=['PO7', 'PO3', 'POz', 'PO4', 'PO8', 'O1', 'Oz', 'O2', 'Cp4', 'C4', 'F4', 'Cp3', 'C3', 'F3', 'Cz', 'Fz']
 # test_ssvep.classifier.setup_channel_selection(method = "SBS", metric="accuracy", initial_channels = initial_subset,    # wrapper setup
@@ -40,51 +40,51 @@ test_ssvep.main(online=False, training=True, max_samples=5120, pp_type="bandpass
 
 print("debug")
 
-# Some optional plotting
-# # plot a spectrogram of the session
-for ci, ch in enumerate(test_ssvep.channel_labels):
-    eeg = np.array(test_ssvep.classifier.X[0,ci,:])
-    tv = [e/test_ssvep.fsample for e in list(range(0,len(eeg)))]
+# # Some optional plotting
+# # # plot a spectrogram of the session
+# for ci, ch in enumerate(test_ssvep.channel_labels):
+#     eeg = np.array(test_ssvep.classifier.X[0,ci,:])
+#     tv = [e/test_ssvep.fsample for e in list(range(0,len(eeg)))]
 
-    plt.plot(tv, eeg)
+#     plt.plot(tv, eeg)
 
-plt.show()
-plt.clf()
+# plt.show()
+# plt.clf()
 
-for i in range(48):
-    eeg = np.array(test_ssvep.classifier.X[i,15,:])
-    tv = [e/test_ssvep.fsample for e in list(range(0,len(eeg)))]
+# for i in range(48):
+#     eeg = np.array(test_ssvep.classifier.X[i,15,:])
+#     tv = [e/test_ssvep.fsample for e in list(range(0,len(eeg)))]
 
-    f, t, Sxx = scipy.signal.spectrogram(eeg, fs=test_ssvep.fsample, nperseg=512)
+#     f, t, Sxx = scipy.signal.spectrogram(eeg, fs=test_ssvep.fsample, nperseg=512)
 
-    fp, Pxx = scipy.signal.welch(eeg, fs=test_ssvep.fsample, nperseg=512, return_onesided = True)
+#     fp, Pxx = scipy.signal.welch(eeg, fs=test_ssvep.fsample, nperseg=512, return_onesided = True)
 
-    f_target = test_ssvep.classifier.target_freqs[int(test_ssvep.classifier.y[i])]
+#     f_target = test_ssvep.classifier.target_freqs[int(test_ssvep.classifier.y[i])]
 
-    # Plot the EEG for inspection
-    plt.subplot(311)
-    plt.plot(tv,eeg)
-    plt.title(f_target)
+#     # Plot the EEG for inspection
+#     plt.subplot(311)
+#     plt.plot(tv,eeg)
+#     plt.title(f_target)
 
-    # psd
-    plt.subplot(312)
-    plt.plot(fp, Pxx)
-    plt.vlines(x=[f_target,f_target*2,f_target*3], ymin=-1000, ymax=1000)
-    plt.xlim([-0.5,50])
-    plt.ylim([-0.5,20])
+#     # psd
+#     plt.subplot(312)
+#     plt.plot(fp, Pxx)
+#     plt.vlines(x=[f_target,f_target*2,f_target*3], ymin=-1000, ymax=1000)
+#     plt.xlim([-0.5,50])
+#     plt.ylim([-0.5,20])
     
-    # spectrogram
-    plt.subplot(313)
-    plt.pcolormesh(t, f, Sxx, shading='gouraud')
-    plt.ylabel('Frequency [Hz]')
-    plt.xlabel('Time [sec]')
-    plt.ylim([0,30])
-    plt.xlim([0,4])
-    plt.hlines(y=[f_target,f_target*2,f_target*3], xmin=-5, xmax=5, color='r')
-    plt.show()
+#     # spectrogram
+#     plt.subplot(313)
+#     plt.pcolormesh(t, f, Sxx, shading='gouraud')
+#     plt.ylabel('Frequency [Hz]')
+#     plt.xlabel('Time [sec]')
+#     plt.ylim([0,30])
+#     plt.xlim([0,4])
+#     plt.hlines(y=[f_target,f_target*2,f_target*3], xmin=-5, xmax=5, color='r')
+#     plt.show()
 
-    print("debug")
+#     print("debug")
 
-    # clear
-    plt.clf()
+#     # clear
+#     plt.clf()
 
