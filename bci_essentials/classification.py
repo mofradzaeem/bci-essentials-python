@@ -901,6 +901,7 @@ class ssvep_basic_classifier_tf(generic_classifier):
         self.target_freqs = target_freqs
         self.setup = False
 
+    #Are print_fit and print_performance necessary values???
     def fit(self, print_fit=True, print_performance=True):
         print("Oh deary me you must have mistaken me for another classifier which requires training")
         print("I DO NOT NEED TRAINING.")
@@ -1155,10 +1156,10 @@ class ssvep_cca2_classifier(generic_classifier):
         self.clf_model = Pipeline([("CCA", cca)])
         self.clf = Pipeline([("CCA", cca)])
         
-    def fit(self, print_fit=True, print_performance=True):
+    def fit(self,print_fit=True, print_performance=True):
         print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
 
-    def predict(self, X, print_fit=True, print_performance=True, print_predict=True):
+    def predict(self, X, print_performance=True, print_predict=True):
         # if X is 2D, make it 3D with one as first dimension 
         # EKL Edit - UNSURE IF THIS IS NEEDED
         if len(X.shape) < 3:
@@ -1171,7 +1172,7 @@ class ssvep_cca2_classifier(generic_classifier):
             X = self.X
 
         # Convert each window of X into a SPD of dimensions [nwindows, nchannels*nfreqs, nchannels*nfreqs]
-        nwindows, nchannels, nsamples = self.X.shape 
+        nwindows, nchannels, nsamples = X.shape 
         
         if print_predict:
             print("the shape of X is", X.shape)
@@ -1230,6 +1231,7 @@ class ssvep_cca2_classifier(generic_classifier):
                 for f, freq in enumerate(freqs):
                     xtemp = subX[w,:,:].T
                     ytemp = y_ref[f,:,:].T
+                    #EKL EDIT - This isn't quite right...this is causing issues it seems
                     cca_list[f].fit(xtemp, ytemp)
                     [x_scores, y_scores] = cca_list[f].transform(xtemp, ytemp)
                     corrs[f] = np.corrcoef(np.squeeze(x_scores), np.squeeze(y_scores))[0,1]
