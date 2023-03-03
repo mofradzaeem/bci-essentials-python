@@ -20,12 +20,16 @@ import matplotlib.pyplot as plt
 test_ssvep = EEG_data()
 
 # Define the classifier
-test_ssvep.classifier = ssvep_riemannian_mdm_classifier(subset=[])
+# test_ssvep.classifier = ssvep_riemannian_mdm_classifier(subset=[])
+test_ssvep.classifier = ssvep_ts_classifier(subset=[])
+
+fn = "Z:\BCI Program\BCI Studies\Boccia_Software_Pilot-March2023\Data\sub-P001\ses-S002\eeg\sub-P001_ses-S002_task-T1_run-001_eeg.xdf"
 
 # Load from xdf into erp_data format
-test_ssvep.load_offline_eeg_data(filename = "examples/data/adam_ssvep_boccia.xdf", format='xdf')
+# test_ssvep.load_offline_eeg_data(filename = "examples/data/adam_ssvep_boccia.xdf", format='xdf')
+test_ssvep.load_offline_eeg_data(filename = fn,format='xdf')
 
-test_ssvep.classifier.set_ssvep_settings(n_splits=3, random_seed=42, n_harmonics=2, f_width=1.0)
+test_ssvep.classifier.set_ssvep_settings(n_splits=3, random_seed=42, n_harmonics=2, f_width=1.0,covariance_estimator='oas')
 
 # initial_subset=['PO7', 'PO3', 'POz', 'PO4', 'PO8', 'O1', 'Oz', 'O2', 'Cp4', 'C4', 'F4', 'Cp3', 'C3', 'F3', 'Cz', 'Fz']
 # test_ssvep.classifier.setup_channel_selection(method = "SBS", metric="accuracy", initial_channels = initial_subset,    # wrapper setup

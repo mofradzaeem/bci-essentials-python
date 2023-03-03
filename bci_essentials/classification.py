@@ -18,7 +18,7 @@ import datetime
 
 from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 from sklearn.pipeline import make_pipeline, Pipeline
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, SGDClassifier,SGDOneClassSVM
 from sklearn.cross_decomposition import CCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.utils import resample
@@ -724,6 +724,161 @@ class ssvep_riemannian_mdm_classifier(generic_classifier):
             self.pred_probas.append(pred_proba[i])
 
         return pred
+
+class ssvep_ts_classifier(generic_classifier):
+   
+    """
+    This function uses the tangent space of Riemannian Geometery and a SVM to predict classes
+    
+    Defaults to using log-loss and L1_ratio = 0.5 for regression at the moment
+    
+    """
+
+    #TODO - Put in the SSVEP setting options for different types of loss (default to log_loss for probabilities output), l1_ratio, and other factors for this classifier
+    
+    def set_ssvep_settings(self, n_splits=3, random_seed=42, n_harmonics=2, f_width=0.2, covariance_estimator="scm"):
+        # Build the cross-validation split
+        self.n_splits = n_splits
+        self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+        self.rebuild = True
+
+        self.n_harmonics = n_harmonics
+        self.f_width = f_width
+        self.covariance_estimator = covariance_estimator
+
+        # Use an TS classifier with SVC afterwards, maybe there will be other options later
+        # mdm = MDM(metric=dict(mean='riemann', distance='riemann'), n_jobs = 1)
+        ts = TSclassifier(metric='riemann',clf=SGDClassifier(loss='log_loss',l1_ratio=0.5))
+        self.clf_model = Pipeline([("TS",ts)])
+        self.clf = Pipeline([("TS",ts)])
+
+
+    def fit(self, print_fit=True, print_performance=True):
+        # get dimensions
+        X = self.X
+
+
+        # Convert each window of X into a SPD of dimensions [nwindows, nchannels*nfreqs, nchannels*nfreqs]
+        nwindows, nchannels, nsamples = self.X.shape 
+
+        #################
+        # Try rebuilding the classifier each time
+        if self.rebuild == True:
+            self.next_fit_window = 0
+            self.clf = self.clf_model
+
+        # get temporal subset
+        subX = self.X[self.next_fit_window:,:,:]
+        suby = self.y[self.next_fit_window:]
+        self.next_fit_window = nwindows
+
+        # Init predictions to all false -
+        ##EKL EDIT - Doesn't this init all predictions to the 0 class?
+        preds = np.zeros(nwindows)
+
+        def ssvep_kernel(subX, suby):
+            for train_idx, test_idx in self.cv.split(subX,suby):
+                self.clf = self.clf_model
+
+                X_train, X_test = subX[train_idx], subX[test_idx]
+                y_train, y_test = suby[train_idx], suby[test_idx]
+
+                # get the covariance matrices for the training set
+                # X_train_super = get_ssvep_supertrial(X_train, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width, covariance_estimator=self.covariance_estimator)
+                # X_test_super = get_ssvep_supertrial(X_test, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width, covariance_estimator=self.covariance_estimator)
+
+                # get the covariance matrices for the training set
+                X_train_cov = Covariances(estimator=self.covariance_estimator).transform(X_train)
+                X_test_cov = Covariances(estimator=self.covariance_estimator).transform(X_test)
+                
+                # fit the classsifier
+                self.clf.fit(X_train_cov, y_train)
+                preds[test_idx] = self.clf.predict(X_test_cov)
+
+            accuracy = sum(preds == self.y)/len(preds)
+            precision = precision_score(self.y,preds, average="micro")
+            recall = recall_score(self.y, preds, average="micro")
+
+            model = self.clf
+
+            return model, preds, accuracy, precision, recall
+
+        # Check if channel selection is true
+        if self.channel_selection_setup:
+            print("Doing channel selection")
+
+            updated_subset, updated_model, preds, accuracy, precision, recall = channel_selection_by_method(ssvep_kernel, self.X, self.y, self.channel_labels,             # kernel setup
+                                                                            self.chs_method, self.chs_metric, self.chs_initial_subset,                                      # wrapper setup
+                                                                            self.chs_max_time, self.chs_min_channels, self.chs_max_channels, self.chs_performance_delta,    # stopping criterion
+                                                                            self.chs_n_jobs, self.chs_output) 
+                
+            print("The optimal subset is ", updated_subset)
+
+            self.subset = updated_subset
+            self.clf = updated_model
+        else: 
+            print("Not doing channel selection")
+            self.clf, preds, accuracy, precision, recall= ssvep_kernel(subX, suby)
+
+        # Print performance stats
+
+        self.offline_window_count = nwindows
+        self.offline_window_counts.append(self.offline_window_count)
+
+        # accuracy
+        accuracy = sum(preds == self.y)/len(preds)
+        self.offline_accuracy.append(accuracy)
+        if print_performance:
+            print("accuracy = {}".format(accuracy))
+
+        # precision
+        precision = precision_score(self.y, preds, average='micro')
+        self.offline_precision.append(precision)
+        if print_performance:
+            print("precision = {}".format(precision))
+
+        # recall
+        recall = recall_score(self.y, preds, average='micro')
+        self.offline_recall.append(recall)
+        if print_performance:
+            print("recall = {}".format(recall))
+
+        # confusion matrix in command line
+        cm = confusion_matrix(self.y, preds)
+        self.offline_cm = cm
+        if print_performance:
+            print("confusion matrix")
+            print(cm)
+
+    def predict(self, X, print_predict=True):
+        # if X is 2D, make it 3D with one as first dimension
+        if len(X.shape) < 3:
+            X = X[np.newaxis, ...]
+
+        X = self.get_subset(X)
+
+        if print_predict:
+            print("the shape of X is", X.shape)
+
+        #Need to get the data into a covariance matrix to make it the right shape
+        
+        # X_super = get_ssvep_supertrial(X, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width)
+        X_cov = Covariances(estimator=self.covariance_estimator).transform(X)
+        
+        pred = self.clf.predict(X_cov)
+        pred_proba = self.clf.predict_proba(X_cov)
+
+        if print_predict:
+            print(pred)
+            print(pred_proba)
+
+        for i in range(len(pred)):
+            self.predictions.append(pred[i])
+            self.pred_probas.append(pred_proba[i])
+
+        return pred
+
     
 class ssvep_cca_classifier(generic_classifier):
     """
@@ -731,9 +886,9 @@ class ssvep_cca_classifier(generic_classifier):
     """
 
     def set_ssvep_settings(self, n_splits=3, random_seed=42, n_harmonics=2, f_width=0.2, covariance_estimator="scm"):
-        # Build the cross-validation split
-        self.n_splits = n_splits
-        self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+        # # Build the cross-validation split - EKL edit - not needed
+        # self.n_splits = n_splits
+        # self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
 
         self.rebuild = True
 
@@ -876,10 +1031,8 @@ class ssvep_cca_classifier(generic_classifier):
         if print_predict:
             print("the shape of X is", X.shape)
 
-        X_super = get_ssvep_supertrial(X, self.target_freqs, fsample=256, n_harmonics=self.n_harmonics, f_width=self.f_width)
-
-        pred = self.clf.predict(X_super)
-        pred_proba = self.clf.predict_proba(X_super)
+        pred = self.clf.predict(X)
+        pred_proba = self.clf.predict_proba(X)
 
         if print_predict:
             print(pred)
@@ -891,6 +1044,26 @@ class ssvep_cca_classifier(generic_classifier):
 
         return pred
 
+class ssvep_cca2_classifier(generic_classifier):
+    """Classify SSVEP signal based on the CCA implementation, written by EKL, updating DCM's implementation
+
+    Args:
+        generic_classifier (default): Passes in the generic classifier 
+
+    Returns:
+        _type_: prediction value for the SSVEP based on class
+    """
+    
+    def set_ssvep_settings(self,sampling_freq,target_freqs,n_harmonics=2, f_width=0.2, covariance_estimator="scm"):
+        self.sampling_freq = sampling_freq
+        self.target_freqs = target_freqs
+        self.setup = False
+        
+    def fit(self, print_fit=True, print_performance=True):
+        print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
+      
+    
+        
 # Train free classifier
 # SSVEP CCA Classifier Sans Training
 class ssvep_basic_classifier_tf(generic_classifier):
