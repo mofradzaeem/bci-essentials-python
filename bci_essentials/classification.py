@@ -171,6 +171,36 @@ def get_ssvep_supertrial(X,
             super_X[w, lower_bound:upper_bound, lower_bound:upper_bound] = cov_mat_diag
 
     return super_X
+
+def ref_gen(fundamental:float, fs:float, n_samples:int, n_harmonics:int):
+    """
+        Generates reference sine and cosine signal with harmonics.
+
+        Parameters
+        ----------
+            fundamental: float
+                Fundamental frequency of the desired references [Hz]
+            fs: float
+                Sampling frequency [Hz]
+            n_samples: int
+                Number of samples for the reference signals (i.e., length of signal)
+            n_harmonics: int
+                Number of harmonics to generate
+
+        Returns
+            waves: np.ndarray
+                Array containing the sine and cosines for the fundamental and harmonics.
+                Shape is `[2*(harmonics+1), n_samples]`
+    """
+
+    waves = np.zeros((2*n_harmonics, n_samples))
+    t = np.linspace(0, n_samples/fs, n_samples)
+
+    for h in range(n_harmonics):
+        waves[2*h,:] = np.sin(2*np.pi*t*(fundamental+h*fundamental))
+        waves[2*h+1,:] = np.cos(2*np.pi*t*(fundamental+h*fundamental))
+
+    return waves
     
 
 # Write function that add to training set, fit, and predict
@@ -951,145 +981,69 @@ class ssvep_cca_classifier(generic_classifier):
     Classifies SSVEP based on Canonical correlation analysis (CCA)
     """
 
-    def set_ssvep_settings(self, target_freqs, n_harmonics=2, f_width=0.2, covariance_estimator="scm", n_components = 3, f_low = 0.1, f_high=30, bp_order=5, cca_scale=True, cca_maxitr=500, cca_tol = 1e-06):
-
+    def set_ssvep_settings(self, target_freqs, n_harmonics=2, n_components=1, f_low=5, f_high=40, bp_order=5, cca_scale=True, cca_maxitr=500, cca_tol = 1e-06):
         #Basic required variables
-        self.rebuild = True
+        self.setup = False
+
         #Variables needed for CCA implementation below
         self.target_freqs = target_freqs
         self.n_harmonics = n_harmonics
-        self.f_width = f_width
         self.f_low = f_low
         self.f_high = f_high
-        self.bp_order = bp_order
-        #Covariance variables
-        self.covariance_estimator = covariance_estimator
+        self.bp_order = bp_order        
+
         #CCA Variables
         self.n_components = n_components
         self.cca_scale = cca_scale
         self.cca_maxitr = cca_maxitr
         self.cca_tol = cca_tol
         
-
-        # Use a a CCA Classifier
-        cca = CCA(n_components=self.n_components,scale=self.cca_scale,max_iter=self.cca_maxitr,tol=self.cca_tol)
-        self.clf_model = Pipeline([("CCA", cca)])
-        self.clf = Pipeline([("CCA", cca)])
-        
     def fit(self, print_fit=True, print_performance=True):
         print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
 
-    def predict(self, X, print_fit=True, print_performance=True):
-        # get dimensions
-        X = self.X
-
+    def predict(self, X):
+        self.X = X
         # Convert each window of X into a SPD of dimensions [nwindows, nchannels*nfreqs, nchannels*nfreqs]
         nwindows, nchannels, nsamples = self.X.shape 
 
-        #################
-        # Try rebuilding the classifier each time
-        if self.rebuild == True:
-            self.next_fit_window = 0
-            self.clf = self.clf_model
-
-        # get temporal subset
-        subX = self.X[self.next_fit_window:,:,:]
-        suby = self.y[self.next_fit_window:]
-        self.next_fit_window = nwindows
-
         # Preprocess data
-        subX = bandpass(subX, f_low=1, f_high=40, order=4, fsample=self.sampling_freq)
+        subX = bandpass(self.X, f_low=self.f_low, f_high=self.f_high, order=self.bp_order, fsample=self.sampling_freq)
 
-        # Init predictions to all false 
-        preds = np.zeros(nwindows)
+        # Initialize predictions variable
+        preds = np.empty(nwindows)
+             
+        # Generate reference signals and CCA objects
+        n_freqs = len(self.target_freqs)
+        y_ref = np.zeros((n_freqs, 2*self.n_harmonics, nsamples))
+        cca_list = [None] * n_freqs
+        for f, freq in enumerate(self.target_freqs):
+            y_ref[f,:,:] = ref_gen(freq, self.sampling_freq, nsamples, self.n_harmonics)
+            cca_list[f] = CCA(n_components=self.n_components,scale=self.cca_scale,max_iter=self.cca_maxitr,tol=self.cca_tol)
 
-        def ref_gen(f_target, fs, n_samples, n_harmonics):
-            """
-                Generates a reference signal with harmonics. Reference includes a sine and cosine signal
-            """
+        # If online processing, reshape to concatenate windows
+        # if self.online == True:
+        #     subX = np.reshape(subX, (1, nchannels, -1), order="F")
 
-            waves = np.zeros((2*n_harmonics, n_samples))
-            t = np.linspace(0, n_samples/fs, n_samples)
+        # Predict using CCA
+        for w in range(nwindows):
+            corrs = np.zeros(n_freqs)
+            for f, freq in enumerate(self.target_freqs):
+                xtemp = subX[w,:,:].T
+                ytemp = y_ref[f,:,:].T
+                cca_list[f].fit(xtemp, ytemp)
+                [x_scores, y_scores] = cca_list[f].transform(xtemp, ytemp)
+                corrs[f] = np.corrcoef(np.squeeze(x_scores), np.squeeze(y_scores))[0,1]
 
-            for h in range(n_harmonics):
-                waves[2*h,:] = np.sin(2*np.pi*t*(f_target+h*f_target))
-                waves[2*h+1,:] = np.cos(2*np.pi*t*(f_target+h*f_target))
+            # Vote on the most likely value as the prediction
+            preds[w] = np.argmax([corrs])
 
-            return waves
-               
-
-        def ssvep_kernel(subX, suby):
-            # Generate reference signals and CCA objects
-            n_harmonics = 3
-            freqs = self.target_freqs
-            n_freqs = len(freqs)
-            n_comp = 1
-            y_ref = np.zeros((n_freqs, 2*n_harmonics, nsamples))
-            cca_list = [None] * n_freqs
-            for f, freq in enumerate(freqs):
-                y_ref[f,:,:] = ref_gen(freq, self.sampling_freq, nsamples, n_harmonics)
-                cca_list[f] = CCA(n_components=n_comp)
-
-            # Predict using CCA
-            for w in range(nwindows):
-                corrs = np.zeros(n_freqs)
-                for f, freq in enumerate(freqs):
-                    xtemp = subX[w,:,:].T
-                    ytemp = y_ref[f,:,:].T
-                    cca_list[f].fit(xtemp, ytemp)
-                    [x_scores, y_scores] = cca_list[f].transform(xtemp, ytemp)
-                    corrs[f] = np.corrcoef(np.squeeze(x_scores), np.squeeze(y_scores))[0,1]
-
-                # Vote on the most likely value as the prediction
-                preds[w] = np.argmax([corrs])
-
-            accuracy = sum(preds == self.y)/len(preds)
-            precision = precision_score(self.y,preds, average="micro")
-            recall = recall_score(self.y, preds, average="micro")
-
-            model = self.clf
-
-            return model, preds, accuracy, precision, recall
-
-        # Check if channel selection is true
-        if self.channel_selection_setup:
-            print("Doing channel selection")
-
-            updated_subset, updated_model, preds, accuracy, precision, recall = channel_selection_by_method(ssvep_kernel, self.X, self.y, self.channel_labels,             # kernel setup
-                                                                            self.chs_method, self.chs_metric, self.chs_initial_subset,                                      # wrapper setup
-                                                                            self.chs_max_time, self.chs_min_channels, self.chs_max_channels, self.chs_performance_delta,    # stopping criterion
-                                                                            self.chs_n_jobs, self.chs_output) 
-                
-            print("The optimal subset is ", updated_subset)
-
-            self.subset = updated_subset
-            self.clf = updated_model
-        else: 
-            print("Not doing channel selection")
-            self.clf, preds, accuracy, precision, recall= ssvep_kernel(subX, suby)
-
-        # Print performance stats
-
-        self.offline_window_count = nwindows
-        self.offline_window_counts.append(self.offline_window_count)
-
-        # accuracy
         accuracy = sum(preds == self.y)/len(preds)
-        self.offline_accuracy.append(accuracy)
-        if print_performance:
-            print("accuracy = {}".format(accuracy))
+        precision = precision_score(self.y,preds, average="micro")
+        recall = recall_score(self.y, preds, average="micro")
 
-        # precision
-        precision = precision_score(self.y, preds, average='micro')
-        self.offline_precision.append(precision)
-        if print_performance:
-            print("precision = {}".format(precision))
+        model = self.clf
 
-        # recall
-        recall = recall_score(self.y, preds, average='micro')
-        self.offline_recall.append(recall)
-        if print_performance:
-            print("recall = {}".format(recall))
+        return model, preds, accuracy, precision, recall
 
         # confusion matrix in command line
         cm = confusion_matrix(self.y, preds)
@@ -1097,29 +1051,6 @@ class ssvep_cca_classifier(generic_classifier):
         if print_performance:
             print("confusion matrix")
             print(cm)
-
-    def predict_old(self, X, print_predict=True):
-        # if X is 2D, make it 3D with one as first dimension
-        if len(X.shape) < 3:
-            X = X[np.newaxis, ...]
-
-        X = self.get_subset(X)
-
-        if print_predict:
-            print("the shape of X is", X.shape)
-
-        pred = self.clf.predict(X)
-        pred_proba = self.clf.predict_proba(X)
-
-        if print_predict:
-            print(pred)
-            print(pred_proba)
-
-        for i in range(len(pred)):
-            self.predictions.append(pred[i])
-            self.pred_probas.append(pred_proba[i])
-
-        return pred
 
 class ssvep_cca2_classifier(generic_classifier):
     """Classify SSVEP signal based on the CCA implementation, written by EKL, updating DCM's implementation
