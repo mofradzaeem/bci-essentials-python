@@ -998,6 +998,7 @@ class ssvep_cca_classifier(generic_classifier):
         self.cca_maxitr = cca_maxitr
         self.cca_tol = cca_tol
         
+        
     def fit(self, print_fit=True, print_performance=True):
         print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
 
