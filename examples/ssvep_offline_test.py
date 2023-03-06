@@ -23,7 +23,8 @@ test_ssvep = EEG_data()
 # test_ssvep.classifier = ssvep_riemannian_mdm_classifier(subset=[])
 test_ssvep.classifier = ssvep_ts_classifier(subset=[])
 
-fn = "Z:\BCI Program\BCI Studies\Boccia_Software_Pilot-March2023\Data\sub-P003\ses-S003\eeg\sub-P003_ses-S003_task-T1_run-001_eeg.xdf"
+# fn = "Z:\BCI Program\BCI Studies\Boccia_Software_Pilot-March2023\Data\sub-P003\ses-S003\eeg\sub-P003_ses-S003_task-T1_run-001_eeg.xdf"
+fn = "examples/data/p001_ssvep_boccia.xdf"
 
 # Load from xdf into erp_data format
 # test_ssvep.load_offline_eeg_data(filename = "examples/data/adam_ssvep_boccia.xdf", format='xdf')

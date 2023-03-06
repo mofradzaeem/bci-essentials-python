@@ -736,7 +736,7 @@ class ssvep_ts_classifier(generic_classifier):
 
     #TODO - Put in the SSVEP setting options for different types of loss (default to log_loss for probabilities output), l1_ratio, and other factors for this classifier
     
-    def set_ssvep_settings(self, n_splits=3, random_seed=42, n_harmonics=2, f_width=0.2, covariance_estimator="scm", sgd_loss = "hinge",l1_ratio = 0.15, penalty = 'L2'):
+    def set_ssvep_settings(self, n_splits=3, random_seed=42, n_harmonics=2, f_width=0.2, covariance_estimator="scm", sgd_loss = "hinge", l1_ratio = 0.15, penalty = 'L2'):
         # Build the cross-validation split
         self.n_splits = n_splits
         self.cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
