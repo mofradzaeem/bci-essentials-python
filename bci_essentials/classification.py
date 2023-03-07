@@ -978,10 +978,16 @@ class ssvep_basic_classifier_tf(generic_classifier):
     
 class ssvep_cca_classifier(generic_classifier):
     """
-    Classifies SSVEP based on Canonical correlation analysis (CCA)
+    Classifies SSVEP based on Canonical correlation analysis (CCA) provided by the NCAN Center, and the SSVEP Feature Extractor toolbox.
+    This work was written by Hadi Habibzadeh, generously shared by supervisor Jamie Norton, and supported from grants at the National Center for Adaptive Neurotechnologies (NCAN)
+    
     """
-
+    
     def set_ssvep_settings(self, target_freqs, n_harmonics=2, n_components=1, f_low=5, f_high=40, bp_order=5, cca_scale=True, cca_maxitr=500, cca_tol = 1e-06):
+        """
+        This function sets the SSVEP settings that work with CCA implementation 
+        """
+        
         #Basic required variables
         self.setup = False
 
@@ -1053,8 +1059,10 @@ class ssvep_cca_classifier(generic_classifier):
             print("confusion matrix")
             print(cm)
 
+
 class ssvep_cca2_classifier(generic_classifier):
-    """Classify SSVEP signal based on the CCA implementation, written by EKL, updating DCM's implementation
+    """
+    Classifies SSVEP based on Canonical correlation analysis (CCA) from Above
 
     Args:
         generic_classifier (default): Passes in the generic classifier 
@@ -1063,7 +1071,16 @@ class ssvep_cca2_classifier(generic_classifier):
         _type_: prediction value for the SSVEP based on class
     """
     def set_ssvep_settings(self, target_freqs, n_harmonics=2, f_width=0.2, covariance_estimator="scm", n_components = 3, f_low = 0.1, f_high=30, bp_order=5, cca_scale=True, cca_maxitr=500, cca_tol = 1e-06, use_subset = False):
+        """
+        Sets the initial values for CCA
+        
+        Args:
+            To be written
 
+        Returns:
+            _type_: To be written
+
+        """
         #Default variables
         self.use_subset = use_subset
         #Variables needed for CCA implementation below
@@ -1241,9 +1258,240 @@ class ssvep_cca2_classifier(generic_classifier):
             self.pred_probas.append(pred_proba[i])
 
         return pred
+
+########################################################################
+#EKL Temporary additions to include in NCAN's SSVCEP CCA Classifier
+sys.path.append(os.path.join('plugins\FeatureExtractorSSVEP',os.pardir))
+from FeatureExtractorSSVEP import *   
     
-    
-    
+class ssvep_hadi_cca_classifier(generic_classifier):
+    """
+    Classifies SSVEP based on Canonical correlation analysis (CCA) provided by the NCAN Center, and the SSVEP Feature Extractor toolbox.
+    This work was written by Hadi Habibzadeh, generously shared by supervisor Jamie Norton, and supported from grants at the National Center for Adaptive Neurotechnologies (NCAN)
+
+    Args:
+        generic_classifier (default): Passes in the generic classifier 
+
+    Returns:
+        _type_: prediction value for the SSVEP based on class
+    """
+    def set_ssvep_settings(self, 
+        target_freqs,
+        sampling_frequency, 
+        n_harmonics=3, 
+        f_width=0.2, 
+        covariance_estimator="scm", 
+        n_components = 3, 
+        f_low = 0.1, 
+        f_high=30, 
+        subbands=None,
+        max_correlation_only=True,
+        embedding_dimension=0,
+        delay_step=0,
+        filter_order=0,
+        filter_cutoff_low=0,
+        filter_cutoff_high=0,
+        voters_count=1,
+        random_seed=0,
+        use_gpu=False,
+        max_batch_size=16,
+        explicit_multithreading=0,
+        samples_count=0, 
+        use_subset = False):
+        """
+        Set SSVEP settings for Hadi CCA
+        
+        Args:
+            To be written
+
+        Returns:
+            _type_: To be written
+
+        """
+        #Covariance variables
+        self.covariance_estimator = covariance_estimator
+        #Hadi CCA Variables
+        self.n_components = n_components
+        self.harmonics_count = n_harmonics
+        self.target_freqs = target_freqs
+        self.sampling_frequency = sampling_frequency,
+        self.subbands = subbands,
+        self.max_correlation_only = max_correlation_only,
+        self.embedding_dimension = embedding_dimension,
+        self.delay_step = delay_step,
+        self.filter_order = filter_order,
+        self.filter_cutoff_low = filter_cutoff_low,
+        self.filter_cutoff_high = filter_cutoff_high,
+        self.voters_count = voters_count,
+        self.random_seed = random_seed,
+        self.use_gpu = use_gpu,
+        self.max_batch_size= max_batch_size,
+        self.explicit_multithreading= explicit_multithreading,
+        self.samples_count=samples_count
+        
+        #Default variables
+        self.use_subset = use_subset
+
+        # Use a a CCA Classifier. Should probably have less code repeition and just pass in classifiers to use. Will update later
+        #TODO - Make this more flexible with other classifiers.
+        cca = FeatureExtractorCCA()
+        
+        self.clf_model = Pipeline([("CCA", cca)])
+        self.clf = Pipeline([("CCA", cca)])
+        
+    def fit(self,print_fit=True, print_performance=True):
+        print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
+
+    def predict(self, X, print_performance=True, print_predict=True):
+        # if X is 2D, make it 3D with one as first dimension 
+        # EKL Edit - UNSURE IF THIS IS NEEDED
+        if len(X.shape) < 3:
+            X = X[np.newaxis, ...]
+
+        #Get X value
+        if(self.use_subset):
+            X = self.get_subset(X)
+        else:
+            X = self.X
+
+        # Convert each window of X into a SPD of dimensions [nwindows, nchannels*nfreqs, nchannels*nfreqs]
+        nwindows, nchannels, nsamples = X.shape 
+        
+        if print_predict:
+            print("the shape of X is", X.shape)
+        
+        #################            
+        if self.setup == False:
+            print("setting up the training free classifier")
+
+            self.setup = True
+
+        # get temporal subset
+        #EKL Comment - I don't think we need this....
+        # subX = self.X[self.next_fit_window:,:,:]
+        # suby = self.y[self.next_fit_window:]
+        self.next_fit_window = nwindows
+        subX = self.X
+        suby = self.y
+        
+        # Preprocess data
+        subX = bandpass(subX, f_low=self.f_low, f_high=self.f_high, order=self.bp_order, fsample=self.sampling_freq)
+
+        # Init predictions to all false - Again, this is initing to 0, ,which may not be false 
+        preds = np.zeros(nwindows)
+
+        #EKL Comment I kind of hate this is a definition within the predict definition...
+        def ref_gen(f_target, fs, n_samples, n_harmonics):
+            """
+                Generates a reference signal with harmonics. Reference includes a sine and cosine signal
+            """
+
+            waves = np.zeros((2*n_harmonics, n_samples))
+            t = np.linspace(0, n_samples/fs, n_samples)
+
+            for h in range(n_harmonics):
+                waves[2*h,:] = np.sin(2*np.pi*t*(f_target+h*f_target))
+                waves[2*h+1,:] = np.cos(2*np.pi*t*(f_target+h*f_target))
+
+            return waves
+               
+        #TODO - Remove the suby call here, as it isn't being used. We are generating y separately.
+        def ssvep_kernel(subX, suby):
+            # Generate reference signals and CCA objects
+            n_harmonics = self.n_harmonics #Was 3
+            freqs = self.target_freqs
+            n_freqs = len(freqs)
+            n_comp = self.n_components #was at 1 before
+            y_ref = np.zeros((n_freqs, 2*n_harmonics, nsamples))
+            cca_list = [None] * n_freqs
+            for f, freq in enumerate(freqs):
+                y_ref[f,:,:] = ref_gen(freq, self.sampling_freq, nsamples, n_harmonics)
+                cca_list[f] = CCA(n_components=n_comp)
+
+            # Predict using CCA
+            for w in range(nwindows):
+                corrs = np.zeros(n_freqs)
+                for f, freq in enumerate(freqs):
+                    xtemp = subX[w,:,:].T
+                    ytemp = y_ref[f,:,:].T
+                    #EKL EDIT - This isn't quite right...this is causing issues it seems
+                    cca_list[f].fit(xtemp, ytemp)
+                    [x_scores, y_scores] = cca_list[f].transform(xtemp, ytemp)
+                    corrs[f] = np.corrcoef(np.squeeze(x_scores), np.squeeze(y_scores))[0,1]
+
+                # Vote on the most likely value as the prediction
+                preds[w] = np.argmax([corrs])
+
+            accuracy = sum(preds == self.y)/len(preds)
+            precision = precision_score(self.y,preds, average="micro")
+            recall = recall_score(self.y, preds, average="micro")
+
+            model = self.clf
+
+            return model, preds, accuracy, precision, recall
+
+        # Check if channel selection is true
+        if self.channel_selection_setup:
+            print("Doing channel selection")
+
+            updated_subset, updated_model, preds, accuracy, precision, recall = channel_selection_by_method(ssvep_kernel, self.X, self.y, self.channel_labels,             # kernel setup
+                                                                            self.chs_method, self.chs_metric, self.chs_initial_subset,                                      # wrapper setup
+                                                                            self.chs_max_time, self.chs_min_channels, self.chs_max_channels, self.chs_performance_delta,    # stopping criterion
+                                                                            self.chs_n_jobs, self.chs_output) 
+                
+            print("The optimal subset is ", updated_subset)
+
+            self.subset = updated_subset
+            self.clf = updated_model
+        else: 
+            print("Not doing channel selection")
+            self.clf, preds, accuracy, precision, recall= ssvep_kernel(subX, suby)
+
+        # Print performance stats
+
+        self.offline_window_count = nwindows
+        self.offline_window_counts.append(self.offline_window_count)
+
+        # accuracy
+        accuracy = sum(preds == self.y)/len(preds)
+        self.offline_accuracy.append(accuracy)
+        if print_performance:
+            print("accuracy = {}".format(accuracy))
+
+        # precision
+        precision = precision_score(self.y, preds, average='micro')
+        self.offline_precision.append(precision)
+        if print_performance:
+            print("precision = {}".format(precision))
+
+        # recall
+        recall = recall_score(self.y, preds, average='micro')
+        self.offline_recall.append(recall)
+        if print_performance:
+            print("recall = {}".format(recall))
+
+        # confusion matrix in command line
+        cm = confusion_matrix(self.y, preds)
+        self.offline_cm = cm
+        if print_performance:
+            print("confusion matrix")
+            print(cm)
+
+    def predict_old(self, X, print_predict=True):
+
+
+        pred = self.clf.predict(X)
+        pred_proba = self.clf.predict_proba(X)
+
+        if print_predict:
+            print(pred)
+            print(pred_proba)
+
+        for i in range(len(pred)):
+            self.predictions.append(pred[i])
+            self.pred_probas.append(pred_proba[i])
+
+        return pred    
     
     
 # TODO : Add a SSVEP CCA Classifier
