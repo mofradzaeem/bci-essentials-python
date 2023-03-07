@@ -998,20 +998,22 @@ class ssvep_cca_classifier(generic_classifier):
         self.cca_maxitr = cca_maxitr
         self.cca_tol = cca_tol
         
-        
     def fit(self, print_fit=True, print_performance=True):
         print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
 
-    def predict(self, X):
-        self.X = X
+    def predict(self, X, print_predict):
         # Convert each window of X into a SPD of dimensions [nwindows, nchannels*nfreqs, nchannels*nfreqs]
-        nwindows, nchannels, nsamples = self.X.shape 
+        nwindows, nchannels, nsamples = X.shape 
 
-        # Preprocess data
-        subX = bandpass(self.X, f_low=self.f_low, f_high=self.f_high, order=self.bp_order, fsample=self.sampling_freq)
+        # Reshape and preprocess data
+        X = np.reshape(np.transpose(X, (1,2,0)), (nchannels, -1), order="F")   # Unwrap windows
+        [nchannes, nsamples] = X.shape  # Update shape 
+        subX = bandpass(X, f_low=self.f_low, f_high=self.f_high, order=self.bp_order, fsample=self.sampling_freq)
 
+        y = self.y[self.next_fit_window:]
+        
         # Initialize predictions variable
-        preds = np.empty(nwindows)
+        # preds = np.empty(nwindows)
              
         # Generate reference signals and CCA objects
         n_freqs = len(self.target_freqs)
@@ -1026,32 +1028,34 @@ class ssvep_cca_classifier(generic_classifier):
         #     subX = np.reshape(subX, (1, nchannels, -1), order="F")
 
         # Predict using CCA
-        for w in range(nwindows):
-            corrs = np.zeros(n_freqs)
-            for f, freq in enumerate(self.target_freqs):
-                xtemp = subX[w,:,:].T
-                ytemp = y_ref[f,:,:].T
-                cca_list[f].fit(xtemp, ytemp)
-                [x_scores, y_scores] = cca_list[f].transform(xtemp, ytemp)
-                corrs[f] = np.corrcoef(np.squeeze(x_scores), np.squeeze(y_scores))[0,1]
+        # for w in range(nwindows):
+        corrs = np.zeros(n_freqs)
+        for f, freq in enumerate(self.target_freqs):
+            xtemp = X.T
+            ytemp = y_ref[f,:,:].T
+            cca_list[f].fit(xtemp, ytemp)
+            [x_scores, y_scores] = cca_list[f].transform(xtemp, ytemp)
+            corrs[f] = np.corrcoef(np.squeeze(x_scores), np.squeeze(y_scores))[0,1]
 
-            # Vote on the most likely value as the prediction
-            preds[w] = np.argmax([corrs])
+        # Vote on the most likely value as the prediction
+        preds = np.argmax([corrs])
+        # preds[w] = np.argmax([corrs])
 
-        accuracy = sum(preds == self.y)/len(preds)
-        precision = precision_score(self.y,preds, average="micro")
-        recall = recall_score(self.y, preds, average="micro")
+        # accuracy = sum(preds == self.y)/len(preds)
+        # precision = precision_score(self.y,preds, average="micro")
+        # recall = recall_score(self.y, preds, average="micro")
 
-        model = self.clf
+        # model = self.clf
 
-        return model, preds, accuracy, precision, recall
+        return preds
+        # return model, preds, accuracy, precision, recall
 
-        # confusion matrix in command line
-        cm = confusion_matrix(self.y, preds)
-        self.offline_cm = cm
-        if print_performance:
-            print("confusion matrix")
-            print(cm)
+        # # confusion matrix in command line
+        # cm = confusion_matrix(self.y, preds)
+        # self.offline_cm = cm
+        # if print_performance:
+        #     print("confusion matrix")
+        #     print(cm)
 
 class ssvep_cca2_classifier(generic_classifier):
     """Classify SSVEP signal based on the CCA implementation, written by EKL, updating DCM's implementation
