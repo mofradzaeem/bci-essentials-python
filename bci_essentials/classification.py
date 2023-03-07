@@ -1332,12 +1332,29 @@ class ssvep_hadi_cca_classifier(generic_classifier):
         #Default variables
         self.use_subset = use_subset
 
-        # Use a a CCA Classifier. Should probably have less code repeition and just pass in classifiers to use. Will update later
+        # Set up the CCA
         #TODO - Make this more flexible with other classifiers.
         cca = FeatureExtractorCCA()
-        
-        self.clf_model = Pipeline([("CCA", cca)])
-        self.clf = Pipeline([("CCA", cca)])
+
+        cca.setup_feature_extractor(
+            harmonics_count,
+            targets_frequencies,
+            sampling_frequency,
+            subbands=subbands,           
+            embedding_dimension=embedding_dimension,
+            delay_step=delay_step,
+            filter_order=filter_order,
+            filter_cutoff_low=filter_cutoff_low,
+            filter_cutoff_high=filter_cutoff_high,
+            voters_count=voters_count,
+            random_seed=random_seed,
+            use_gpu=use_gpu,
+            max_batch_size=max_batch_size,
+            explicit_multithreading=explicit_multithreading,
+            samples_count=samples_count)
+
+        self.clf_model = cca
+        self.clf = cca
         
     def fit(self,print_fit=True, print_performance=True):
         print("This classifier DOES NOT NEED TRAINING. So no fit for you.")
@@ -1355,6 +1372,7 @@ class ssvep_hadi_cca_classifier(generic_classifier):
             X = self.X
 
         # Convert each window of X into a SPD of dimensions [nwindows, nchannels*nfreqs, nchannels*nfreqs]
+        #This is the same that is needed for the NCAN
         nwindows, nchannels, nsamples = X.shape 
         
         if print_predict:
@@ -1368,46 +1386,22 @@ class ssvep_hadi_cca_classifier(generic_classifier):
 
         # get temporal subset
         #EKL Comment - I don't think we need this....
-        # subX = self.X[self.next_fit_window:,:,:]
-        # suby = self.y[self.next_fit_window:]
+        self.next_fit_window = 0
+        subX = self.X[self.next_fit_window:,:,:]
+        suby = self.y[self.next_fit_window:]
         self.next_fit_window = nwindows
-        subX = self.X
-        suby = self.y
+        # self.next_fit_window = nwindows
+        # subX = self.X
+        # suby = self.y
         
-        # Preprocess data
-        subX = bandpass(subX, f_low=self.f_low, f_high=self.f_high, order=self.bp_order, fsample=self.sampling_freq)
-
         # Init predictions to all false - Again, this is initing to 0, ,which may not be false 
         preds = np.zeros(nwindows)
-
-        #EKL Comment I kind of hate this is a definition within the predict definition...
-        def ref_gen(f_target, fs, n_samples, n_harmonics):
-            """
-                Generates a reference signal with harmonics. Reference includes a sine and cosine signal
-            """
-
-            waves = np.zeros((2*n_harmonics, n_samples))
-            t = np.linspace(0, n_samples/fs, n_samples)
-
-            for h in range(n_harmonics):
-                waves[2*h,:] = np.sin(2*np.pi*t*(f_target+h*f_target))
-                waves[2*h+1,:] = np.cos(2*np.pi*t*(f_target+h*f_target))
-
-            return waves
                
         #TODO - Remove the suby call here, as it isn't being used. We are generating y separately.
         def ssvep_kernel(subX, suby):
+            
             # Generate reference signals and CCA objects
-            n_harmonics = self.n_harmonics #Was 3
-            freqs = self.target_freqs
-            n_freqs = len(freqs)
-            n_comp = self.n_components #was at 1 before
-            y_ref = np.zeros((n_freqs, 2*n_harmonics, nsamples))
-            cca_list = [None] * n_freqs
-            for f, freq in enumerate(freqs):
-                y_ref[f,:,:] = ref_gen(freq, self.sampling_freq, nsamples, n_harmonics)
-                cca_list[f] = CCA(n_components=n_comp)
-
+            ###START HERE
             # Predict using CCA
             for w in range(nwindows):
                 corrs = np.zeros(n_freqs)
