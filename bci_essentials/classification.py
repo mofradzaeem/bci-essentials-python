@@ -1047,7 +1047,7 @@ class ssvep_cca_classifier(generic_classifier):
 
         # model = self.clf
 
-        return preds
+        return int(preds)
         # return model, preds, accuracy, precision, recall
 
         # # confusion matrix in command line

@@ -11,12 +11,16 @@ from bci_essentials.bci_data import *
 test_ssvep = EEG_data()
 
 # Define the classifier
-test_ssvep.classifier = ssvep_riemannian_mdm_classifier()
+# test_ssvep.classifier = ssvep_riemannian_mdm_classifier()
+test_ssvep.classifier = ssvep_ts_classifier()
 
 # # Connect the streams
 test_ssvep.stream_online_eeg_data()
 
-test_ssvep.classifier.set_ssvep_settings(n_splits=5, random_seed=42, n_harmonics=3, f_width=0.5, covariance_estimator="oas")
+# test_ssvep.classifier.set_ssvep_settings(n_splits=5, random_seed=42, n_harmonics=3, f_width=0.5, covariance_estimator="oas")
+
+test_ssvep.classifier.set_ssvep_settings(n_splits=5, random_seed=42, n_harmonics=3, f_width=0.5, covariance_estimator="oas",sgd_loss="log_loss",penalty="elasticnet")
+
 
 # # Channel Selection
 # initial_subset=[]
