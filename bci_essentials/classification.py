@@ -1007,7 +1007,7 @@ class ssvep_cca_classifier(generic_classifier):
 
         # Reshape and preprocess data
         X = np.reshape(np.transpose(X, (1,2,0)), (nchannels, -1), order="F")   # Unwrap windows
-        [nchannes, nsamples] = X.shape  # Update shape 
+        [nchannels, nsamples] = X.shape  # Update shape 
         subX = bandpass(X, f_low=self.f_low, f_high=self.f_high, order=self.bp_order, fsample=self.sampling_freq)
 
         y = self.y[self.next_fit_window:]
@@ -1039,23 +1039,8 @@ class ssvep_cca_classifier(generic_classifier):
 
         # Vote on the most likely value as the prediction
         preds = np.argmax([corrs])
-        # preds[w] = np.argmax([corrs])
-
-        # accuracy = sum(preds == self.y)/len(preds)
-        # precision = precision_score(self.y,preds, average="micro")
-        # recall = recall_score(self.y, preds, average="micro")
-
-        # model = self.clf
 
         return int(preds)
-        # return model, preds, accuracy, precision, recall
-
-        # # confusion matrix in command line
-        # cm = confusion_matrix(self.y, preds)
-        # self.offline_cm = cm
-        # if print_performance:
-        #     print("confusion matrix")
-        #     print(cm)
 
 class ssvep_cca2_classifier(generic_classifier):
     """Classify SSVEP signal based on the CCA implementation, written by EKL, updating DCM's implementation
