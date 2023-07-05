@@ -921,6 +921,7 @@ class ssvep_ts_classifier(generic_classifier):
            
 # Train free classifier
 # SSVEP CCA Classifier Sans Training
+
 class ssvep_basic_classifier_tf(generic_classifier):
     """
     Classifies SSVEP based on relative bandpower, taking only the maximum
@@ -1236,6 +1237,59 @@ class ssvep_cca2_classifier(generic_classifier):
     
     
 # TODO : Add a SSVEP CCA Classifier
+
+class ssvep_cca_classifier(generic_classifier):
+    """
+    Classifies SSVEP based on canonical correlation analysis
+    """
+
+    def set_ssvep_settings(self, sampling_freq, target_freqs, harmonics):
+        self.sampling_freq = sampling_freq
+        self.target_freqs = target_freqs
+        self.harmonics = harmonics
+        self.setup = False
+        self.ccas = [CCA(n_components=1) for _ in self.target_freqs]
+
+    def generate_reference_signals(self, nsamples):
+        # Generate reference signals for CCA
+        t = np.arange(0, nsamples) / self.sampling_freq
+        reference_signals = []
+        for freq in self.target_freqs:
+            signal = []
+            for h in range(1, self.harmonics+1):
+                signal.append(np.sin(2*np.pi*freq*h*t))
+                signal.append(np.cos(2*np.pi*freq*h*t))
+            reference_signals.append(np.array(signal))
+        return reference_signals
+
+    def fit(self, X, y, print_fit=True, print_performance=True):
+        nwindows, nchannels, nsamples = X.shape
+        if not self.setup:
+            print("Setting up the CCA Classifier")
+            self.reference_signals = self.generate_reference_signals(nsamples)
+            self.setup = True
+
+        # Train each CCA
+        for idx, target in enumerate(self.target_freqs):
+            # Get the windows where the target frequency is the label
+            X_target = X[y == target]
+            # Train the CCA on these windows and the reference signals for this target
+            self.ccas[idx].fit(X_target.reshape(-1, nsamples).T, self.reference_signals[idx].T)
+
+    def predict(self, X, print_predict=True):
+        nwindows, nchannels, nsamples = X.shape
+
+        predictions = []
+        for w in range(nwindows):
+            window = X[w, :, :]
+            correlations = []
+            for cca in self.ccas:
+                U, V = cca.transform(window.T, self.reference_signals[self.ccas.index(cca)].T)
+                correlations.append(np.corrcoef(U.T, V.T)[0, 1])
+            predictions.append(np.argmax(correlations))
+
+        return np.array(predictions)
+
 
 # class ssvep_rg_classifier(generic_classifier):
 #     def set_ssvep_rg_classifier_settings(self, n_splits, type="MDM")
