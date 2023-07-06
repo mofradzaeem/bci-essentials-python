@@ -26,11 +26,11 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, precision_
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn import preprocessing
 
+
 from pyriemann.preprocessing import Whitening
 from pyriemann.estimation import ERPCovariances, XdawnCovariances, Covariances
 from pyriemann.tangentspace import TangentSpace
 from pyriemann.classification import MDM, TSclassifier
-from pyriemann.utils.viz import plot_confusion_matrix
 from pyriemann.channelselection import FlatChannelRemover, ElectrodeSelection
 from pyriemann.clustering import Potato
 
@@ -977,7 +977,7 @@ class ssvep_basic_classifier_tf(generic_classifier):
         return int(prediction)
 
     
-class ssvep_cca_classifier(generic_classifier):
+class ssvep_cca1_classifier(generic_classifier):
     """
     Classifies SSVEP based on Canonical correlation analysis (CCA)
     """
@@ -1243,10 +1243,10 @@ class ssvep_cca_classifier(generic_classifier):
     Classifies SSVEP based on canonical correlation analysis
     """
 
-    def set_ssvep_settings(self, sampling_freq, target_freqs, harmonics):
+    def set_ssvep_settings(self,target_freqs, sampling_freq=30,n_harmonics=3):
         self.sampling_freq = sampling_freq
         self.target_freqs = target_freqs
-        self.harmonics = harmonics
+        self.harmonics = n_harmonics
         self.setup = False
         self.ccas = [CCA(n_components=1) for _ in self.target_freqs]
 

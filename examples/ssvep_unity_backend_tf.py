@@ -14,7 +14,7 @@ test_ssvep.train_complete = True
 
 # Define the classifier
 # test_ssvep.classifier = ssvep_basic_classifier_tf()
-test_ssvep.classifier = ssvep_cca_classifier(subset=["S1","S2","S3"])
+test_ssvep.classifier = ssvep_cca_classifier(subset=[])
 # target_freqs = [9, 9.6, 10.28, 11.07, 12, 13.09, 14.4] 
 # target_freqs = [7.692307, 10, 11.11111]
 target_freqs = [8.33, 10, 12.5]

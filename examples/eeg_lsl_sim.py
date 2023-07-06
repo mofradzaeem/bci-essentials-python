@@ -48,8 +48,8 @@ except:
     nloops = 1
 
 # Identify the file to simulate
-# filename = "examples/data/p300_example.xdf"
-filename = "C:/Users/danie/Documents/Projects/bci-essentials-python/examples/data/brian_ssvep_data.xdf"
+filename = "examples/data/sub-P008_ses-S001_task-T1_run-001_eeg.xdf"
+#filename = "C:/Users/danie/Documents/Projects/bci-essentials-python/examples/data/brian_ssvep_data.xdf"
 
 # Load the example EEG stream
 eeg_stream = EEG_data()
