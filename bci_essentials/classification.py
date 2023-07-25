@@ -27,7 +27,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn import preprocessing
 
 
-from pyriemann.preprocessing import Whitening
+
 from pyriemann.estimation import ERPCovariances, XdawnCovariances, Covariances
 from pyriemann.tangentspace import TangentSpace
 from pyriemann.classification import MDM, TSclassifier
@@ -1269,6 +1269,7 @@ class ssvep_cca_classifier(generic_classifier):
     def predict(self, X, print_predict=True):
         nwindows, nchannels, nsamples = X.shape
 
+
         # Setting up the CCA Classifier if not already done
         if not self.setup:
             print("Setting up the CCA Classifier")
@@ -1291,9 +1292,23 @@ class ssvep_cca_classifier(generic_classifier):
                 correlations.append(np.corrcoef(U.T, V.T)[0, 1])
             predictions.append(self.target_freqs[np.argmax(correlations)])
 
+        accuracy = sum(predictions == self.y)/len(predictions)
+        precision = precision_score(self.y,predictions, average="micro")
+        recall = recall_score(self.y, predictions, average="micro")
 
-        return np.array(predictions)
-     
+        self.offline_accuracy.append(accuracy)
+        print("accuracy = {}".format(accuracy))
+
+        self.offline_precision.append(precision)
+        print("precision = {}".format(precision))
+
+        self.offline_recall.append(recall)
+        print("recall = {}".format(recall))
+
+       
+        return predictions
+    
+
 
 # class ssvep_rg_classifier(generic_classifier):
 #     def set_ssvep_rg_classifier_settings(self, n_splits, type="MDM")
