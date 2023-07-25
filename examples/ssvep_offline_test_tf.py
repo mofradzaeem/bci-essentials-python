@@ -45,6 +45,9 @@ test_ssvep.classifier.set_ssvep_settings(target_freqs = target_freqs)
 
 test_ssvep.main(online=False, training=False,train_complete=True,print_performance=True,print_predict=True, max_samples=5120)
 
+# TODO compute prediction accuracy by comparing test_ssvep_classifier.predictions to test_ssvep.labels
+#      only take the labels every 5th value.
+
 print("debug")
 
 # # Some optional plotting

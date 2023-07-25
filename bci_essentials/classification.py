@@ -1290,8 +1290,9 @@ class ssvep_cca_classifier(generic_classifier):
                 cca.fit(window.T, ref_signal.T)
                 U, V = cca.transform(window.T, ref_signal.T)
                 correlations.append(np.corrcoef(U.T, V.T)[0, 1])
-        predictions.append(self.target_freqs[np.argmax(correlations)])
 
+        self.predictions.append(self.target_freqs[np.argmax(correlations)])
+        
         # accuracy = sum(predictions == self.y)/len(predictions)
         # precision = precision_score(self.y,predictions, average="micro")
         # recall = recall_score(self.y, predictions, average="micro")
